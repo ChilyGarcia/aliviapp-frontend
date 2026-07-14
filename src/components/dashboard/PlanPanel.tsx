@@ -6,6 +6,7 @@ import { chatService } from "@/services/chat.service";
 import { plansService } from "@/services/plans.service";
 import type { ChatUsage } from "@/types/chat.types";
 import type { Plan } from "@/types/plan.types";
+import { formatChatDuration } from "@/types/plan.types";
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -70,7 +71,7 @@ export const PlanPanel = () => {
   };
 
   if (loading) {
-    return <div className="max-w-4xl text-sm text-muted-foreground">Cargando tu plan…</div>;
+    return <div className="text-sm text-muted-foreground">Cargando tu plan…</div>;
   }
 
   const used = usage?.used_this_month ?? 0;
@@ -78,7 +79,7 @@ export const PlanPanel = () => {
   const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       {/* Plan card */}
       <div className="bg-hero text-primary-foreground rounded-3xl p-8 shadow-elegant relative overflow-hidden">
         <div className="absolute top-4 right-6 text-white/10 text-7xl font-black">×</div>
@@ -88,7 +89,7 @@ export const PlanPanel = () => {
           </div>
           <h2 className="font-display font-extrabold text-3xl md:text-4xl">{usage?.plan_name ?? "—"}</h2>
           <p className="text-white/85 mt-2 flex items-center gap-2">
-            <Clock className="h-4 w-4" /> Cada chat dura hasta 24-72h según tu plan
+            <Clock className="h-4 w-4" /> Cada chat dura hasta 30 min (FREE) o 24 h (PREMIUM)
           </p>
 
           <div className="mt-8 bg-white/10 backdrop-blur rounded-2xl p-5 border border-white/15">
@@ -130,7 +131,7 @@ export const PlanPanel = () => {
                   <MessageCircle className="h-4 w-4" /> {plan.monthly_chat_limit} chats / mes
                 </div>
                 <div className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Clock className="h-4 w-4" /> Cada chat dura {plan.chat_duration_hours}h
+                  <Clock className="h-4 w-4" /> Cada chat dura {formatChatDuration(plan.chat_duration_minutes)}
                 </div>
                 <Button
                   variant={isActive ? "outline" : "hero"}

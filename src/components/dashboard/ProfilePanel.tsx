@@ -12,7 +12,7 @@ export const ProfilePanel = ({ user }: ProfilePanelProps) => {
   const userEmail = user?.email || "email@empresa.com";
   const userInitials = user ? getUserInitials(user.full_name) : "U";
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="bg-hero text-primary-foreground rounded-3xl p-8 shadow-elegant relative overflow-hidden">
         <div className="absolute top-6 right-8 text-white/10 text-6xl font-black">+</div>
         <div className="relative flex items-center gap-5">

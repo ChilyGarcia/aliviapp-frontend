@@ -1,14 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Phone, Video, MoreVertical, Search, Plus, X } from "lucide-react";
+import { Send, Phone, Video, MoreVertical, Search, Plus, X, ArrowLeft, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useChatSocket } from "@/hooks/use-chat-socket";
 import { chatService } from "@/services/chat.service";
+import { schedulingService } from "@/services/scheduling.service";
 import { usersService } from "@/services/users.service";
+import {
+  ChatAppointmentReminder,
+  hasUpcomingAppointment,
+} from "@/components/dashboard/ChatAppointmentReminder";
+import { ChatRatingCard } from "@/components/dashboard/ChatRatingCard";
+import { ChatMessageBubble } from "@/components/dashboard/ChatMessageBubble";
+import { TriageResultDialog } from "@/components/dashboard/TriageResultDialog";
+import { triageService } from "@/services/triage.service";
 import type { User } from "@/types/auth.types";
-import type { Conversation, Message } from "@/types/chat.types";
+import type { ChatUsage, Conversation, Message } from "@/types/chat.types";
+import type { Appointment } from "@/types/scheduling.types";
+import type { TriageResult } from "@/types/triage.types";
 
 const AVATAR_COLORS = ["bg-cta", "bg-primary", "bg-accent", "bg-primary-deep"];
 
@@ -26,8 +38,53 @@ const formatTime = (iso: string) =>
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
-export const ChatPanel = () => {
+const activityAt = (conversation: Conversation) =>
+  new Date(conversation.last_message_at || conversation.started_at).getTime();
+
+const sortByActivity = (list: Conversation[]) =>
+  [...list].sort((a, b) => activityAt(b) - activityAt(a));
+
+const normalizeConversation = (conversation: Conversation): Conversation => ({
+  ...conversation,
+  last_message_at: conversation.last_message_at || conversation.started_at,
+  expires_at: conversation.expires_at ?? null,
+  period_active: Boolean(conversation.period_active),
+  unread_count: conversation.unread_count ?? 0,
+});
+
+const isPeriodActive = (conversation: Conversation, now = Date.now()) => {
+  if (conversation.status !== "ACTIVE") return false;
+  if (conversation.period_active && conversation.expires_at) {
+    return new Date(conversation.expires_at).getTime() > now;
+  }
+  if (!conversation.expires_at) return false;
+  return new Date(conversation.expires_at).getTime() > now;
+};
+
+const bumpConversation = (
+  list: Conversation[],
+  conversationId: string,
+  patch: Partial<Conversation>
+) =>
+  sortByActivity(
+    list.map((conversation) =>
+      conversation.id === conversationId
+        ? { ...conversation, ...patch }
+        : conversation
+    )
+  );
+
+export const ChatPanel = ({
+  initialProfessionalId,
+  onProfessionalHandled,
+  onUnreadChange,
+}: {
+  initialProfessionalId?: string | null;
+  onProfessionalHandled?: () => void;
+  onUnreadChange?: (unreadTotal: number) => void;
+}) => {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [participants, setParticipants] = useState<Record<string, User>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -38,7 +95,18 @@ export const ChatPanel = () => {
   const [showPicker, setShowPicker] = useState(false);
   const [professionals, setProfessionals] = useState<User[]>([]);
   const [loadingProfessionals, setLoadingProfessionals] = useState(false);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [triageDetail, setTriageDetail] = useState<TriageResult | null>(null);
+  const [triageDetailOpen, setTriageDetailOpen] = useState(false);
+  const [triageDetailLoading, setTriageDetailLoading] = useState(false);
+  const [usage, setUsage] = useState<ChatUsage | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = activeId;
+
+  useEffect(() => {
+    onUnreadChange?.(conversations.reduce((sum, conversation) => sum + (conversation.unread_count || 0), 0));
+  }, [conversations, onUnreadChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +114,7 @@ export const ChatPanel = () => {
     (async () => {
       setLoadingConversations(true);
       try {
-        const list = await chatService.listConversations();
+        const list = sortByActivity((await chatService.listConversations()).map(normalizeConversation));
         if (cancelled) return;
         setConversations(list);
 
@@ -55,7 +123,10 @@ export const ChatPanel = () => {
         if (cancelled) return;
         setParticipants((prev) => ({ ...prev, ...Object.fromEntries(resolved.map((u) => [u.id, u])) }));
 
-        if (list.length > 0) setActiveId(list[0].id);
+        const isMobileViewport = window.matchMedia("(max-width: 767px)").matches;
+        if (list.length > 0 && !isMobileViewport) {
+          setActiveId(list[0].id);
+        }
       } catch (error) {
         toast({
           title: "No se pudieron cargar tus chats",
@@ -72,6 +143,67 @@ export const ChatPanel = () => {
     };
   }, []);
 
+  // Refresco de bandeja para detectar mensajes en chats no abiertos.
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshInbox = async () => {
+      try {
+        const list = sortByActivity((await chatService.listConversations()).map(normalizeConversation));
+        if (cancelled) return;
+        setConversations((prev) => {
+          const active = activeIdRef.current;
+          return list.map((conversation) =>
+            conversation.id === active
+              ? { ...conversation, unread_count: 0 }
+              : conversation
+          );
+        });
+      } catch {
+        // silencioso: el panel ya tiene estado local
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void refreshInbox();
+    }, 8000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const scheduled = await schedulingService.listAppointments("SCHEDULED");
+        if (!cancelled) setAppointments(scheduled);
+      } catch {
+        if (!cancelled) setAppointments([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await chatService.getUsage();
+        if (!cancelled) setUsage(data);
+      } catch {
+        if (!cancelled) setUsage(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     if (!activeId) {
       setMessages([]);
@@ -82,7 +214,15 @@ export const ChatPanel = () => {
     (async () => {
       try {
         const list = await chatService.listMessages(activeId);
-        if (!cancelled) setMessages(list);
+        if (cancelled) return;
+        setMessages(list);
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === activeId
+              ? { ...conversation, unread_count: 0 }
+              : conversation
+          )
+        );
       } catch (error) {
         if (!cancelled) {
           toast({
@@ -101,6 +241,43 @@ export const ChatPanel = () => {
 
   const handleIncoming = useCallback((message: Message) => {
     setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+    setConversations((prev) =>
+      bumpConversation(prev, message.conversation_id, {
+        last_message_at: message.sent_at,
+        unread_count: 0,
+        ...(message.period_expires_at
+          ? {
+              expires_at: message.period_expires_at,
+              period_active: Boolean(message.period_active),
+            }
+          : {}),
+      })
+    );
+    if (message.period_active) {
+      void chatService.getUsage().then(setUsage).catch(() => undefined);
+    }
+    if (message.sender_id !== user?.id) {
+      void chatService.markConversationRead(message.conversation_id).catch(() => undefined);
+    }
+  }, [user?.id]);
+
+  const openTriageDetail = useCallback(async (assessmentId: string) => {
+    setTriageDetailOpen(true);
+    setTriageDetailLoading(true);
+    setTriageDetail(null);
+    try {
+      const result = await triageService.getById(assessmentId);
+      setTriageDetail(result);
+    } catch (error) {
+      setTriageDetailOpen(false);
+      toast({
+        title: "No se pudo cargar el triage",
+        description: error instanceof Error ? error.message : "Intenta de nuevo",
+        variant: "destructive",
+      });
+    } finally {
+      setTriageDetailLoading(false);
+    }
   }, []);
 
   const { connected, isPeerTyping, sendMessage: wsSend, sendTyping } = useChatSocket(activeId, handleIncoming);
@@ -112,12 +289,17 @@ export const ChatPanel = () => {
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
   const activeParticipant = active ? participants[active.professional_id] : undefined;
-  const isClosed = active ? active.status !== "ACTIVE" || new Date(active.expires_at) <= new Date() : false;
+  const periodActive = active ? isPeriodActive(active) : false;
+  const standby = Boolean(active && active.status === "ACTIVE" && !periodActive);
+  const remainingChats = usage?.remaining ?? 0;
+  const quotaExhausted = standby && remainingChats <= 0;
+  const canSend = Boolean(active && active.status === "ACTIVE" && (periodActive || remainingChats > 0));
+  const isClosed = Boolean(active && (active.status !== "ACTIVE" || quotaExhausted));
 
   const handleInputChange = (value: string) => {
     setInput(value);
     const now = Date.now();
-    if (connected && !isClosed && now - lastTypingSentRef.current > 2000) {
+    if (connected && canSend && now - lastTypingSentRef.current > 2000) {
       lastTypingSentRef.current = now;
       sendTyping();
     }
@@ -125,23 +307,50 @@ export const ChatPanel = () => {
 
   const send = async () => {
     const content = input.trim();
-    if (!content || !activeId || isClosed) return;
+    if (!content || !activeId || !canSend) return;
     setInput("");
 
     if (connected) {
       wsSend(content);
+      setConversations((prev) =>
+        bumpConversation(prev, activeId, {
+          last_message_at: new Date().toISOString(),
+          unread_count: 0,
+        })
+      );
       return;
     }
 
     try {
       const message = await chatService.sendMessage(activeId, content);
       setMessages((prev) => [...prev, message]);
+      setConversations((prev) =>
+        bumpConversation(prev, activeId, {
+          last_message_at: message.sent_at,
+          unread_count: 0,
+          ...(message.period_expires_at
+            ? {
+                expires_at: message.period_expires_at,
+                period_active: Boolean(message.period_active),
+              }
+            : {}),
+        })
+      );
+      if (standby || message.period_active) {
+        void chatService.getUsage().then(setUsage).catch(() => undefined);
+      }
     } catch (error) {
+      const description = errorMessage(error, "Intenta de nuevo");
+      const isLimit =
+        /limit|mensual|reached/i.test(description) || description.includes("Monthly chat limit");
       toast({
-        title: "No se pudo enviar el mensaje",
-        description: errorMessage(error, "Intenta de nuevo"),
+        title: isLimit ? "Sin chats disponibles" : "No se pudo enviar el mensaje",
+        description: isLimit
+          ? "Ya usaste todos los chats de tu plan este mes. Mejora tu plan para continuar."
+          : description,
         variant: "destructive",
       });
+      void chatService.getUsage().then(setUsage).catch(() => undefined);
     }
   };
 
@@ -167,12 +376,25 @@ export const ChatPanel = () => {
 
   const startChat = async (professionalId: string) => {
     try {
-      const conversation = await chatService.startConversation(professionalId);
+      const conversation = normalizeConversation(await chatService.startConversation(professionalId));
       setConversations((prev) =>
-        prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]
+        sortByActivity(
+          prev.some((c) => c.id === conversation.id)
+            ? prev.map((c) => (c.id === conversation.id ? conversation : c))
+            : [conversation, ...prev]
+        )
       );
       setActiveId(conversation.id);
       setShowPicker(false);
+
+      const professional = professionals.find((p) => p.id === professionalId)
+        ?? participants[professionalId];
+      if (professional) {
+        setParticipants((prev) => ({ ...prev, [professional.id]: professional }));
+      } else {
+        const fetched = await usersService.getUserById(professionalId);
+        setParticipants((prev) => ({ ...prev, [fetched.id]: fetched }));
+      }
     } catch (error) {
       toast({
         title: "No se pudo iniciar el chat",
@@ -182,129 +404,215 @@ export const ChatPanel = () => {
     }
   };
 
+  useEffect(() => {
+    if (!initialProfessionalId) return;
+    void startChat(initialProfessionalId).finally(() => onProfessionalHandled?.());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProfessionalId]);
+
   const filtered = conversations.filter((c) => {
     const name = participants[c.professional_id]?.full_name ?? "";
     return name.toLowerCase().includes(search.toLowerCase());
   });
 
-  return (
-    <div className="bg-card rounded-3xl shadow-soft border border-border h-[calc(100vh-10rem)] flex overflow-hidden">
-      {/* CONVERSATION LIST */}
-      <div className="w-72 border-r border-border flex flex-col bg-soft shrink-0 hidden md:flex">
-        <div className="p-4 border-b border-border bg-card">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-bold text-primary">Mensajes</h3>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={openPicker}>
-              <Plus className="h-4 w-4" />
+  const handleSelectConversation = (id: string) => {
+    setActiveId(id);
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === id ? { ...conversation, unread_count: 0 } : conversation
+      )
+    );
+    void chatService.markConversationRead(id).catch(() => undefined);
+  };
+  const handleBackToList = () => setActiveId(null);
+
+  const conversationList = (
+    <>
+      <div className="p-4 border-b border-border bg-card">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display font-bold text-primary">Mensajes</h3>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={openPicker}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar..."
+            className="w-full bg-secondary rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {loadingConversations && (
+          <p className="text-xs text-muted-foreground text-center p-4">Cargando chats…</p>
+        )}
+        {!loadingConversations && filtered.length === 0 && (
+          <div className="text-center p-6 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Aún no tienes conversaciones.
+            </p>
+            <Button variant="hero" size="sm" onClick={openPicker}>
+              <Plus className="h-4 w-4" /> Iniciar chat
             </Button>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full bg-secondary rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {loadingConversations && (
-            <p className="text-xs text-muted-foreground text-center p-4">Cargando chats…</p>
-          )}
-          {!loadingConversations && filtered.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center p-4">
-              Aún no tienes conversaciones. Toca + para iniciar una.
-            </p>
-          )}
-          {filtered.map((c) => {
-            const participant = participants[c.professional_id];
-            const name = participant?.full_name ?? "Profesional";
-            const expired = c.status !== "ACTIVE" || new Date(c.expires_at) <= new Date();
-            return (
-              <button
-                key={c.id}
-                onClick={() => setActiveId(c.id)}
-                className={cn(
-                  "w-full text-left px-4 py-3 flex items-center gap-3 border-l-4 transition-smooth",
-                  activeId === c.id ? "bg-card border-primary" : "border-transparent hover:bg-card"
+        )}
+        {filtered.map((c) => {
+          const participant = participants[c.professional_id];
+          const name = participant?.full_name ?? "Profesional";
+          const expired = c.status !== "ACTIVE";
+          const cStandby = c.status === "ACTIVE" && !isPeriodActive(c);
+          const hasAppointment = hasUpcomingAppointment(
+            appointments,
+            c.professional_id,
+            "professional_id"
+          );
+          const unread = c.unread_count > 0 && c.id !== activeId;
+          return (
+            <button
+              key={c.id}
+              onClick={() => handleSelectConversation(c.id)}
+              className={cn(
+                "w-full text-left px-4 py-3 flex items-center gap-3 border-l-4 transition-smooth",
+                activeId === c.id ? "bg-card border-primary" : "border-transparent hover:bg-card",
+                unread && "bg-primary/[0.04]"
+              )}
+            >
+              <div className="relative shrink-0">
+                <div className={`h-11 w-11 rounded-full ${avatarColor(c.id)} flex items-center justify-center font-bold text-primary-foreground text-sm`}>
+                  {initialsOf(name)}
+                </div>
+                {!expired && <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-success ring-2 ring-card" />}
+                {hasAppointment && (
+                  <span className="absolute -top-0.5 -left-0.5 h-3.5 w-3.5 rounded-full bg-cta ring-2 ring-card flex items-center justify-center">
+                    <Calendar className="h-2 w-2 text-primary-foreground" />
+                  </span>
                 )}
-              >
-                <div className="relative shrink-0">
-                  <div className={`h-11 w-11 rounded-full ${avatarColor(c.id)} flex items-center justify-center font-bold text-primary-foreground text-sm`}>
-                    {initialsOf(name)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center gap-2">
+                  <div className={cn("text-sm truncate", unread ? "font-bold text-foreground" : "font-semibold text-foreground")}>
+                    {name}
                   </div>
-                  {!expired && <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-success ring-2 ring-card" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center gap-1">
-                    <div className="font-semibold text-sm text-foreground truncate">{name}</div>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{formatTime(c.started_at)}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={cn("text-[10px]", unread ? "text-primary font-semibold" : "text-muted-foreground")}>
+                      {formatTime(c.last_message_at || c.started_at)}
+                    </span>
+                    {unread && (
+                      <span className="min-w-5 h-5 px-1.5 rounded-full bg-cta text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                        {c.unread_count > 99 ? "99+" : c.unread_count}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {expired ? "Chat finalizado" : "Chat activo"}
-                  </p>
                 </div>
-              </button>
-            );
-          })}
-        </div>
+                <p className={cn("text-xs truncate", unread ? "text-foreground/80 font-medium" : "text-muted-foreground")}>
+                  {expired ? "Chat cerrado" : cStandby ? "En espera · envía un mensaje para continuar" : unread ? "Nuevos mensajes del profesional" : "Chat activo"}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  return (
+    <div className={cn(
+      "bg-card rounded-3xl shadow-soft border border-border flex overflow-hidden",
+      isMobile ? "h-[calc(100dvh-9rem)]" : "h-[calc(100vh-10rem)]"
+    )}>
+      {/* CONVERSATION LIST */}
+      <div className={cn(
+        "border-r border-border flex flex-col bg-soft shrink-0",
+        isMobile
+          ? activeId ? "hidden" : "flex w-full"
+          : "hidden md:flex w-72"
+      )}>
+        {conversationList}
       </div>
 
       {/* MAIN PANE */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0",
+        isMobile && !activeId ? "hidden" : "flex"
+      )}>
         {!active ? (
           <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground p-6 text-center">
             {loadingConversations
               ? "Cargando…"
-              : "Selecciona un chat o inicia uno nuevo con el botón + de la lista."}
+              : "Selecciona un chat o inicia uno nuevo con el botón +."}
           </div>
         ) : (
           <>
             {/* HEADER */}
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className={`h-11 w-11 rounded-full ${avatarColor(active.id)} flex items-center justify-center font-bold text-primary-foreground`}>
+            <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-border flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden shrink-0"
+                  onClick={handleBackToList}
+                  aria-label="Volver a mensajes"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <div className="relative shrink-0">
+                  <div className={`h-10 w-10 sm:h-11 sm:w-11 rounded-full ${avatarColor(active.id)} flex items-center justify-center font-bold text-primary-foreground text-sm`}>
                     {initialsOf(activeParticipant?.full_name ?? "P")}
                   </div>
                 </div>
-                <div>
-                  <div className="font-display font-bold text-primary">{activeParticipant?.full_name ?? "Profesional"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {isClosed
-                      ? "Chat finalizado"
-                      : isPeerTyping
-                        ? "Escribiendo…"
-                        : connected
-                          ? "En línea · conectado"
-                          : "Conectando…"}
+                <div className="min-w-0">
+                  <div className="font-display font-bold text-primary truncate text-sm sm:text-base">
+                    {activeParticipant?.full_name ?? "Profesional"}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {active.status !== "ACTIVE"
+                      ? "Chat cerrado"
+                      : quotaExhausted
+                        ? "Sin chats disponibles este mes"
+                        : standby
+                          ? "Periodo en espera · el próximo mensaje usa 1 chat del mes"
+                        : isPeerTyping
+                          ? "Escribiendo…"
+                          : connected
+                            ? "En línea · conectado"
+                            : "Conectando…"}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" disabled><Phone className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="icon" disabled><Video className="h-4 w-4" /></Button>
+              <div className="flex items-center gap-0.5 shrink-0">
+                {activeParticipant && (
+                  <ChatAppointmentReminder
+                    appointments={appointments}
+                    participantId={active.professional_id}
+                    participantName={activeParticipant.full_name}
+                    matchField="professional_id"
+                  />
+                )}
+                {activeParticipant && (
+                  <ChatRatingCard
+                    professionalId={active.professional_id}
+                    professionalName={activeParticipant.full_name}
+                    messageCount={messages.length}
+                  />
+                )}
+                <Button variant="ghost" size="icon" className="hidden sm:inline-flex" disabled><Phone className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" className="hidden sm:inline-flex" disabled><Video className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="icon" disabled><MoreVertical className="h-4 w-4" /></Button>
               </div>
             </div>
 
             {/* MESSAGES */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-soft">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 bg-soft">
               {messages.map((m) => (
-                <div key={m.id} className={cn("flex", m.sender_id === user?.id ? "justify-end" : "justify-start")}>
-                  <div className={cn(
-                    "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-soft",
-                    m.sender_id === user?.id
-                      ? "bg-cta text-primary-foreground rounded-tr-sm"
-                      : "bg-card text-foreground rounded-tl-sm border border-border"
-                  )}>
-                    <p className="leading-relaxed">{m.content}</p>
-                    <div className={cn("text-[10px] mt-1", m.sender_id === user?.id ? "text-white/70" : "text-muted-foreground")}>
-                      {formatTime(m.sent_at)}
-                    </div>
-                  </div>
-                </div>
+                <ChatMessageBubble
+                  key={m.id}
+                  message={m}
+                  isOwn={m.sender_id === user?.id}
+                  onOpenTriage={openTriageDetail}
+                />
               ))}
               {isPeerTyping && (
                 <div className="flex justify-start">
@@ -319,7 +627,7 @@ export const ChatPanel = () => {
             </div>
 
             {/* INPUT */}
-            <div className="p-4 border-t border-border bg-card">
+            <div className="p-3 sm:p-4 border-t border-border bg-card">
               {isClosed && (
                 <p className="text-xs text-destructive text-center mb-2">
                   Este chat ya finalizó. Inicia uno nuevo con este profesional si lo necesitas.
@@ -331,10 +639,10 @@ export const ChatPanel = () => {
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}
                   disabled={isClosed}
-                  placeholder="Escribe un mensaje seguro y confidencial…"
-                  className="flex-1 bg-transparent outline-none text-sm py-2 disabled:opacity-50"
+                  placeholder="Escribe un mensaje…"
+                  className="flex-1 bg-transparent outline-none text-sm py-2 disabled:opacity-50 min-w-0"
                 />
-                <Button variant="hero" size="icon" onClick={send} disabled={isClosed} className="rounded-xl shrink-0">
+                <Button variant="hero" size="icon" onClick={send} disabled={!canSend} className="rounded-xl shrink-0">
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
@@ -381,6 +689,14 @@ export const ChatPanel = () => {
           </div>
         </div>
       )}
+
+      <TriageResultDialog
+        open={triageDetailOpen}
+        onOpenChange={setTriageDetailOpen}
+        triage={triageDetail}
+        loading={triageDetailLoading}
+        title="Detalle de tu triage"
+      />
     </div>
   );
 };

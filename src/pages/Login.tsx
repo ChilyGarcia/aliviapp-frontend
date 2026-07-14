@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { authService } from "@/services/auth.service";
+import { cn } from "@/lib/utils";
 import {
   Mail,
   Lock,
@@ -14,30 +15,68 @@ import {
   EyeOff,
   ArrowRight,
   ShieldCheck,
-  Building2,
   ArrowLeft,
   KeyRound,
+  CircleAlert,
+  CircleCheck,
 } from "lucide-react";
 import heroImg from "@/assets/hero-psychologist.jpg";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 6;
+
+type FieldKey = "email" | "password";
+
+const getEmailError = (email: string): string | null => {
+  const value = email.trim();
+  if (!value) return "Ingresa tu correo electrónico.";
+  if (!EMAIL_REGEX.test(value)) return "El correo no tiene un formato válido.";
+  return null;
+};
+
+const getPasswordError = (password: string): string | null => {
+  if (!password) return "Ingresa tu contraseña.";
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+  }
+  return null;
+};
 
 const Login = () => {
   const navigate = useNavigate();
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    company: "",
     email: "",
     password: "",
     remember: true,
   });
+  const [touched, setTouched] = useState<Record<FieldKey, boolean>>({
+    email: false,
+    password: false,
+  });
+
+  const emailError = useMemo(() => getEmailError(form.email), [form.email]);
+  const passwordError = useMemo(() => getPasswordError(form.password), [form.password]);
+  const showEmailError = touched.email && !!emailError;
+  const showPasswordError = touched.password && !!passwordError;
+  const showEmailSuccess = touched.email && !emailError;
+  const showPasswordSuccess = touched.password && !passwordError;
+  const canSubmit = !emailError && !passwordError && !loading;
+
+  const markTouched = (field: FieldKey) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.email || !form.password) {
+    setTouched({ email: true, password: true });
+
+    if (emailError || passwordError) {
       toast({
-        title: "Datos incompletos",
-        description: "Ingresa tu correo y contraseña corporativos.",
-        variant: "destructive"
+        title: "Revisa los datos",
+        description: "Corrige email y contraseña para continuar.",
+        variant: "destructive",
       });
       return;
     }
@@ -45,13 +84,13 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await authService.login({
-        email: form.email,
+        email: form.email.trim(),
         password: form.password,
       });
 
       toast({
         title: "¡Bienvenido!",
-        description: `Hola ${response.user.full_name}, acceso verificado correctamente.`
+        description: `Hola ${response.user.full_name}, acceso verificado correctamente.`,
       });
 
       navigate(response.user.role === "PROFESSIONAL" ? "/psicologo" : "/panel");
@@ -59,7 +98,7 @@ const Login = () => {
       toast({
         title: "Error de autenticación",
         description: error instanceof Error ? error.message : "Credenciales inválidas",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -68,7 +107,6 @@ const Login = () => {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-soft">
-      {/* LEFT - Brand panel */}
       <aside className="relative hidden lg:flex bg-hero text-primary-foreground p-12 flex-col justify-between overflow-hidden">
         <div className="absolute inset-0 bg-pattern-x opacity-80" />
         <div className="absolute top-20 left-10 text-white/10 text-7xl font-black select-none">×</div>
@@ -83,7 +121,7 @@ const Login = () => {
             Bienvenido a tu espacio<br />de <span className="text-accent">bienestar emocional</span>.
           </h1>
           <p className="text-white/85 text-lg">
-            Ingresa con tus credenciales corporativas para acceder al chat psicológico, tus check-ins y tu plan activo.
+            Ingresa con tus credenciales para acceder al chat psicológico, tus check-ins y tu plan activo.
           </p>
 
           <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-5 flex items-start gap-4">
@@ -105,7 +143,6 @@ const Login = () => {
         </div>
       </aside>
 
-      {/* RIGHT - Form */}
       <main className="flex flex-col justify-center p-6 sm:p-12">
         <div className="w-full max-w-md mx-auto">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary mb-8 transition-smooth">
@@ -118,37 +155,48 @@ const Login = () => {
 
           <h2 className="font-display font-extrabold text-3xl text-primary mb-2">Iniciar sesión</h2>
           <p className="text-muted-foreground mb-8">
-            Accede con tu cuenta de colaborador para iniciar tu atención psicológica por chat.
+            Accede con tu cuenta para iniciar tu atención psicológica por chat.
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div className="space-y-2">
-              <Label htmlFor="company">Empresa</Label>
+              <Label htmlFor="email">Correo electrónico</Label>
               <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="company"
-                  placeholder="Acme Corp"
-                  className="pl-10 h-11"
-                  value={form.company}
-                  onChange={(e) => setForm({ ...form, company: e.target.value })}
+                <Mail
+                  className={cn(
+                    "absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors",
+                    showEmailError ? "text-destructive" : showEmailSuccess ? "text-success" : "text-muted-foreground"
+                  )}
                 />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Correo corporativo</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="tu.nombre@empresa.com"
-                  className="pl-10 h-11"
+                  autoComplete="email"
+                  placeholder="tu.nombre@email.com"
+                  aria-invalid={showEmailError}
+                  aria-describedby={showEmailError || showEmailSuccess ? "email-feedback" : undefined}
+                  className={cn(
+                    "pl-10 h-11 transition-colors",
+                    showEmailError && "border-destructive focus-visible:ring-destructive/40",
+                    showEmailSuccess && "border-success focus-visible:ring-success/30"
+                  )}
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onBlur={() => markTouched("email")}
                 />
               </div>
+              {showEmailError && (
+                <p id="email-feedback" className="flex items-center gap-1.5 text-xs text-destructive animate-fade-in">
+                  <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                  {emailError}
+                </p>
+              )}
+              {showEmailSuccess && (
+                <p id="email-feedback" className="flex items-center gap-1.5 text-xs text-success animate-fade-in">
+                  <CircleCheck className="h-3.5 w-3.5 shrink-0" />
+                  Correo válido
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -159,23 +207,49 @@ const Login = () => {
                 </button>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Lock
+                  className={cn(
+                    "absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors",
+                    showPasswordError ? "text-destructive" : showPasswordSuccess ? "text-success" : "text-muted-foreground"
+                  )}
+                />
                 <Input
                   id="password"
                   type={showPwd ? "text" : "password"}
+                  autoComplete="current-password"
                   placeholder="••••••••"
-                  className="pl-10 pr-10 h-11"
+                  aria-invalid={showPasswordError}
+                  aria-describedby={showPasswordError || showPasswordSuccess ? "password-feedback" : undefined}
+                  className={cn(
+                    "pl-10 pr-10 h-11 transition-colors",
+                    showPasswordError && "border-destructive focus-visible:ring-destructive/40",
+                    showPasswordSuccess && "border-success focus-visible:ring-success/30"
+                  )}
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  onBlur={() => markTouched("password")}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary"
+                  aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
                   {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {showPasswordError && (
+                <p id="password-feedback" className="flex items-center gap-1.5 text-xs text-destructive animate-fade-in">
+                  <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                  {passwordError}
+                </p>
+              )}
+              {showPasswordSuccess && (
+                <p id="password-feedback" className="flex items-center gap-1.5 text-xs text-success animate-fade-in">
+                  <CircleCheck className="h-3.5 w-3.5 shrink-0" />
+                  Contraseña lista
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -189,9 +263,24 @@ const Login = () => {
               </Label>
             </div>
 
-            <Button type="submit" variant="hero" size="lg" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              variant="hero"
+              size="lg"
+              className={cn(
+                "w-full",
+                !canSubmit && "opacity-50 grayscale-[0.2] shadow-none hover:translate-y-0 hover:shadow-none"
+              )}
+              disabled={!canSubmit}
+            >
               {loading ? "Verificando…" : <>Ingresar al panel <ArrowRight className="ml-1" /></>}
             </Button>
+
+            {!canSubmit && !loading && (
+              <p className="text-center text-xs text-muted-foreground -mt-2">
+                Completa un correo válido y tu contraseña para continuar.
+              </p>
+            )}
 
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>

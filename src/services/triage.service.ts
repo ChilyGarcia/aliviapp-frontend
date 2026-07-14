@@ -16,6 +16,10 @@ class TriageService {
     async getHistory(): Promise<TriageResult[]> {
         return apiFetch<TriageResult[]>("/triage/assessments/");
     }
+
+    async getById(assessmentId: string): Promise<TriageResult> {
+        return apiFetch<TriageResult>(`/triage/assessments/${assessmentId}/`);
+    }
 }
 
 export const triageService = new TriageService();

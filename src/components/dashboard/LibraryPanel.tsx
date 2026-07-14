@@ -96,7 +96,7 @@ export const LibraryPanel = () => {
   const featured = resources.filter((r) => r.featured);
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6">
       {/* HEADER + SEARCH */}
       <div className="bg-hero text-primary-foreground rounded-3xl p-6 lg:p-8 shadow-elegant relative overflow-hidden">
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />

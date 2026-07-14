@@ -8,7 +8,7 @@ const TYPING_INDICATOR_TIMEOUT_MS = 3000;
 interface UseChatSocketResult {
     connected: boolean;
     isPeerTyping: boolean;
-    sendMessage: (content: string) => void;
+    sendMessage: (content: string, metadata?: Message["metadata"]) => void;
     sendTyping: () => void;
 }
 
@@ -67,9 +67,15 @@ export function useChatSocket(
         };
     }, [conversationId]);
 
-    const sendMessage = useCallback((content: string) => {
+    const sendMessage = useCallback((content: string, metadata?: Message["metadata"]) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({ type: "message", content }));
+            socketRef.current.send(
+                JSON.stringify({
+                    type: "message",
+                    content,
+                    ...(metadata ? { metadata } : {}),
+                })
+            );
         }
     }, []);
 
