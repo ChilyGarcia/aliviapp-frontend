@@ -335,7 +335,7 @@ const UsersTab = () => {
     const [error, setError] = useState(false);
     const [search, setSearch] = useState("");
     const [roleFilter, setRoleFilter] = useState("");
-    const [deactivating, setDeactivating] = useState<string | null>(null);
+    const [toggling, setToggling] = useState<string | null>(null);
 
     const load = async () => {
         setLoading(true);
@@ -353,19 +353,20 @@ const UsersTab = () => {
 
     useEffect(() => { void load(); }, []);
 
-    const handleDeactivate = async (userId: string, userName: string) => {
-        if (!confirm(`¿Desactivar al usuario "${userName}"?`)) return;
-        setDeactivating(userId);
+    const handleToggleActive = async (u: User) => {
+        const nextState = !u.is_active;
+        const action = nextState ? "activar" : "desactivar";
+        if (!confirm(`¿${action.charAt(0).toUpperCase() + action.slice(1)} al usuario "${u.full_name}"?`)) return;
+
+        setToggling(u.id);
         try {
-            await adminService.deactivateUser(userId);
-            setUsers((prev) =>
-                prev.map((u) => (u.id === userId ? { ...u, is_active: false } : u))
-            );
-            toast({ title: `Usuario "${userName}" desactivado correctamente.` });
+            const updated = await adminService.setUserActive(u.id, nextState);
+            setUsers((prev) => prev.map((x) => (x.id === u.id ? updated : x)));
+            toast({ title: `Usuario "${u.full_name}" ${nextState ? "activado" : "desactivado"} correctamente.` });
         } catch {
-            toast({ title: "No se pudo desactivar el usuario", variant: "destructive" });
+            toast({ title: `No se pudo ${action} el usuario`, variant: "destructive" });
         } finally {
-            setDeactivating(null);
+            setToggling(null);
         }
     };
 
@@ -474,18 +475,26 @@ const UsersTab = () => {
                                         {u.is_active ? "Activo" : "Inactivo"}
                                     </span>
                                 </div>
-                                {u.is_active && u.role !== "ADMIN" && (
+                                {u.role !== "ADMIN" && (
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                                        disabled={deactivating === u.id}
-                                        onClick={() => void handleDeactivate(u.id, u.full_name)}
+                                        title={u.is_active ? "Desactivar usuario" : "Activar usuario"}
+                                        className={cn(
+                                            "shrink-0",
+                                            u.is_active
+                                                ? "text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                : "text-success hover:text-success hover:bg-success/10"
+                                        )}
+                                        disabled={toggling === u.id}
+                                        onClick={() => void handleToggleActive(u)}
                                     >
-                                        {deactivating === u.id ? (
+                                        {toggling === u.id ? (
                                             <RefreshCw className="h-4 w-4 animate-spin" />
                                         ) : (
-                                            <UserX className="h-4 w-4" />
+                                            u.is_active
+                                                ? <UserX className="h-4 w-4" />
+                                                : <UserCheck className="h-4 w-4" />
                                         )}
                                     </Button>
                                 )}

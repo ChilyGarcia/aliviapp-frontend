@@ -12,6 +12,13 @@ class AdminService {
         return apiFetch<User[]>(`/admin/users/${query}`);
     }
 
+    async setUserActive(userId: string, isActive: boolean): Promise<User> {
+        return apiFetch<User>(`/admin/users/${userId}/`, {
+            method: "PATCH",
+            body: JSON.stringify({ is_active: isActive }),
+        });
+    }
+
     async deactivateUser(userId: string): Promise<void> {
         return apiFetch<void>(`/admin/users/${userId}/`, { method: "DELETE" });
     }
