@@ -1,10 +1,14 @@
 import { apiFetch } from "@/lib/api-client";
-import type { AdminStats } from "@/types/admin.types";
+import type { AdminStats, PlanSummaryResponse } from "@/types/admin.types";
 import type { User } from "@/types/auth.types";
 
 class AdminService {
     async getStats(): Promise<AdminStats> {
         return apiFetch<AdminStats>("/admin/dashboard/stats/");
+    }
+
+    async getPlanSummary(): Promise<PlanSummaryResponse> {
+        return apiFetch<PlanSummaryResponse>("/admin/users/plan-summary/");
     }
 
     async getUsers(role?: string): Promise<User[]> {

@@ -6,11 +6,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { getUserInitials } from "@/utils/user.utils";
 import { adminService } from "@/services/admin.service";
 import { toast } from "@/hooks/use-toast";
-import type { AdminStats } from "@/types/admin.types";
+import type { AdminStats, PatientPlanSummary, PlanSummaryResponse } from "@/types/admin.types";
 import type { User } from "@/types/auth.types";
 import {
     LayoutDashboard,
     Users,
+    CreditCard,
     LogOut,
     RefreshCw,
     AlertCircle,
@@ -24,10 +25,13 @@ import {
     Search,
     Shield,
     ChevronDown,
+    CheckCircle2,
+    XCircle,
+    BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type TabKey = "dashboard" | "users";
+type TabKey = "dashboard" | "users" | "plans";
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -43,6 +47,7 @@ const AdminDashboard = () => {
     const tabs = [
         { key: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
         { key: "users" as const, label: "Usuarios", icon: Users },
+        { key: "plans" as const, label: "Planes", icon: CreditCard },
     ];
 
     return (
@@ -140,6 +145,7 @@ const AdminDashboard = () => {
                     <div className="mx-auto max-w-7xl w-full animate-fade-in">
                         {active === "dashboard" && <DashboardTab />}
                         {active === "users" && <UsersTab />}
+                        {active === "plans" && <PlansTab />}
                     </div>
                 </div>
             </main>
@@ -515,5 +521,219 @@ function getUserInitialsFromName(name: string): string {
         .slice(0, 2)
         .toUpperCase();
 }
+
+/* ─── Plans Tab ─────────────────────────────────────────────────────────── */
+
+const PlansTab = () => {
+    const [data, setData] = useState<PlanSummaryResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+    const [search, setSearch] = useState("");
+    const [view, setView] = useState<"all" | "paid" | "free">("all");
+
+    const load = async () => {
+        setLoading(true);
+        setError(false);
+        try {
+            setData(await adminService.getPlanSummary());
+        } catch {
+            setError(true);
+            toast({ title: "No se pudo cargar el resumen de planes", variant: "destructive" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { void load(); }, []);
+
+    if (loading) {
+        return (
+            <div className="space-y-3">
+                {["a", "b", "c", "d", "e"].map((k) => (
+                    <div key={k} className="bg-card border border-border rounded-2xl h-20 animate-pulse" />
+                ))}
+            </div>
+        );
+    }
+
+    if (error || !data) {
+        return (
+            <div className="bg-card border border-border rounded-3xl p-8 text-center space-y-4 shadow-soft">
+                <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
+                <p className="text-sm text-muted-foreground">No se pudo cargar el resumen de planes.</p>
+                <Button variant="outline" onClick={() => void load()}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> Reintentar
+                </Button>
+            </div>
+        );
+    }
+
+    const allUsers = [...data.paid, ...data.free];
+    const sourceList = view === "paid" ? data.paid : view === "free" ? data.free : allUsers;
+    const filtered = sourceList.filter(
+        (u) =>
+            !search ||
+            u.full_name.toLowerCase().includes(search.toLowerCase()) ||
+            u.email.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="space-y-6">
+            {/* Summary cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-soft">
+                    <div className="h-10 w-10 rounded-xl bg-success/10 text-success flex items-center justify-center mb-3">
+                        <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div className="font-display font-extrabold text-2xl text-primary">{data.totals.paid_count}</div>
+                    <div className="text-xs text-muted-foreground mt-1">Pacientes con plan de pago</div>
+                </div>
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-soft">
+                    <div className="h-10 w-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center mb-3">
+                        <XCircle className="h-5 w-5" />
+                    </div>
+                    <div className="font-display font-extrabold text-2xl text-primary">{data.totals.free_count}</div>
+                    <div className="text-xs text-muted-foreground mt-1">Pacientes sin renovar (FREE)</div>
+                </div>
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-soft">
+                    <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
+                        <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <div className="font-display font-extrabold text-2xl text-primary">
+                        {data.totals.paid_count + data.totals.free_count}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Total pacientes activos</div>
+                </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                        type="text"
+                        placeholder="Buscar paciente…"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 h-10 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                </div>
+                <div className="flex rounded-xl border border-border overflow-hidden h-10 shrink-0">
+                    {(["all", "paid", "free"] as const).map((v) => (
+                        <button
+                            key={v}
+                            onClick={() => setView(v)}
+                            className={cn(
+                                "px-4 text-sm font-medium transition-smooth",
+                                view === v
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-card text-muted-foreground hover:bg-soft"
+                            )}
+                        >
+                            {v === "all" ? "Todos" : v === "paid" ? "Con plan" : "Sin renovar"}
+                        </button>
+                    ))}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void load()} className="h-10 px-4">
+                    <RefreshCw className="h-4 w-4 mr-2" /> Actualizar
+                </Button>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+                {filtered.length} paciente{filtered.length !== 1 ? "s" : ""}
+            </p>
+
+            {/* Table */}
+            <div className="bg-card border border-border rounded-2xl shadow-soft overflow-hidden">
+                {filtered.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">
+                        No hay pacientes que coincidan.
+                    </div>
+                ) : (
+                    <div className="divide-y divide-border">
+                        {filtered.map((u) => <PlanRow key={u.user_id} patient={u} />)}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const PlanRow = ({ patient: u }: { patient: PatientPlanSummary }) => {
+    const pct = u.monthly_limit > 0
+        ? Math.min((u.consumed_this_month / u.monthly_limit) * 100, 100)
+        : 0;
+
+    return (
+        <div className="px-5 py-4 hover:bg-soft transition-smooth">
+            <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-cta flex items-center justify-center font-bold text-sm text-primary-foreground shrink-0">
+                    {u.full_name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm text-foreground truncate">{u.full_name}</span>
+                        <span
+                            className={cn(
+                                "text-xs font-semibold px-2 py-0.5 rounded-full shrink-0",
+                                u.is_free_plan
+                                    ? "bg-warning/15 text-warning"
+                                    : "bg-success/15 text-success"
+                            )}
+                        >
+                            {u.plan_name}
+                        </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                </div>
+                <div className="hidden md:flex items-center gap-6 shrink-0 text-right">
+                    <div>
+                        <div className="text-xs text-muted-foreground">Sesiones</div>
+                        <div className="text-sm font-semibold text-foreground">
+                            {u.consumed_this_month} / {u.monthly_limit}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-muted-foreground">Restantes</div>
+                        <div className={cn(
+                            "text-sm font-semibold",
+                            u.remaining_this_month === 0
+                                ? "text-destructive"
+                                : u.remaining_this_month <= 3
+                                    ? "text-warning"
+                                    : "text-success"
+                        )}>
+                            {u.remaining_this_month}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-muted-foreground">Duración</div>
+                        <div className="text-sm font-semibold text-foreground">{u.duration_minutes} min</div>
+                    </div>
+                </div>
+            </div>
+            {/* Consumption bar */}
+            <div className="mt-3 ml-14">
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Consumo del mes</span>
+                    <span>{Math.round(pct)}%</span>
+                </div>
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div
+                        className={cn(
+                            "h-full rounded-full transition-all",
+                            pct >= 100
+                                ? "bg-destructive"
+                                : pct >= 75
+                                    ? "bg-warning"
+                                    : "bg-success"
+                        )}
+                        style={{ width: `${pct}%` }}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default AdminDashboard;
