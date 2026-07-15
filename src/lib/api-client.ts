@@ -58,6 +58,13 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // If the server says the token is invalid or the user is inactive,
+    // clear the local session so the ProtectedRoute redirects to /login.
+    if (response.status === 401) {
+      localStorage.removeItem("auth_access_token");
+      localStorage.removeItem("auth_refresh_token");
+      localStorage.removeItem("auth_user");
+    }
     throw new ApiError(extractErrorMessage(data, "Error de conexión con el servidor"), response.status);
   }
 
