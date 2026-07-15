@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { getUserInitials } from "@/utils/user.utils";
 import { adminService } from "@/services/admin.service";
+import { apiFetch } from "@/lib/api-client";
+import { authService } from "@/services/auth.service";
 import { toast } from "@/hooks/use-toast";
 import type { AdminStats, PatientPlanSummary, PlanSummaryResponse } from "@/types/admin.types";
 import type { User } from "@/types/auth.types";
@@ -12,6 +14,7 @@ import {
     LayoutDashboard,
     Users,
     CreditCard,
+    User as UserIcon,
     LogOut,
     RefreshCw,
     AlertCircle,
@@ -28,10 +31,14 @@ import {
     CheckCircle2,
     XCircle,
     BarChart3,
+    Mail,
+    Pencil,
+    Save,
+    X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type TabKey = "dashboard" | "users" | "plans";
+type TabKey = "dashboard" | "users" | "plans" | "profile";
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -48,6 +55,7 @@ const AdminDashboard = () => {
         { key: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
         { key: "users" as const, label: "Usuarios", icon: Users },
         { key: "plans" as const, label: "Planes", icon: CreditCard },
+        { key: "profile" as const, label: "Mi perfil", icon: UserIcon },
     ];
 
     return (
@@ -146,6 +154,7 @@ const AdminDashboard = () => {
                         {active === "dashboard" && <DashboardTab />}
                         {active === "users" && <UsersTab />}
                         {active === "plans" && <PlansTab />}
+                        {active === "profile" && <ProfileTab />}
                     </div>
                 </div>
             </main>
@@ -730,6 +739,195 @@ const PlanRow = ({ patient: u }: { patient: PatientPlanSummary }) => {
                         )}
                         style={{ width: `${pct}%` }}
                     />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+/* ─── Profile Tab ───────────────────────────────────────────────────────── */
+
+const ProfileTab = () => {
+    const { user } = useAuth();
+    const [editing, setEditing] = useState(false);
+    const [fullName, setFullName] = useState(user?.full_name ?? "");
+    const [saving, setSaving] = useState(false);
+    const [localUser, setLocalUser] = useState<User | null>(user);
+
+    const handleSave = async () => {
+        if (!fullName.trim()) return;
+        setSaving(true);
+        try {
+            const updated = await apiFetch<User>("/users/me/", {
+                method: "PATCH",
+                body: JSON.stringify({ full_name: fullName.trim() }),
+            });
+            // Persist updated user in localStorage so header and sidebar reflect the change
+            const stored = authService.getUser();
+            if (stored) {
+                authService.setSession({
+                    access: authService.getAccessToken()!,
+                    refresh: localStorage.getItem("auth_refresh_token") ?? "",
+                    user: updated,
+                });
+            }
+            setLocalUser(updated);
+            setEditing(false);
+            toast({ title: "Perfil actualizado correctamente." });
+        } catch {
+            toast({ title: "No se pudo actualizar el perfil.", variant: "destructive" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleCancel = () => {
+        setFullName(localUser?.full_name ?? "");
+        setEditing(false);
+    };
+
+    const displayUser = localUser ?? user;
+    const initials = displayUser
+        ? displayUser.full_name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
+        : "A";
+
+    return (
+        <div className="max-w-2xl mx-auto space-y-6">
+            {/* Hero banner */}
+            <div className="bg-hero text-primary-foreground rounded-3xl p-8 shadow-elegant relative overflow-hidden">
+                <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+                <div className="relative flex items-center gap-5">
+                    <div className="h-20 w-20 rounded-2xl bg-cta flex items-center justify-center font-display font-bold text-3xl shadow-soft text-primary-foreground">
+                        {initials}
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2 text-sm bg-white/15 w-fit px-3 py-1 rounded-full mb-2">
+                            <Shield className="h-3.5 w-3.5 text-accent" /> Administrador
+                        </div>
+                        <h2 className="font-display font-extrabold text-2xl">{displayUser?.full_name}</h2>
+                        <p className="text-white/75 text-sm">{displayUser?.email}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Personal data card */}
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-soft">
+                <div className="flex items-center justify-between mb-5">
+                    <h3 className="font-display font-bold text-primary">Información personal</h3>
+                    {!editing && (
+                        <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                            <Pencil className="h-4 w-4 mr-2" /> Editar
+                        </Button>
+                    )}
+                </div>
+
+                <div className="space-y-4">
+                    {/* Full name field */}
+                    <div>
+                        <label htmlFor="admin-fullname" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                            Nombre completo
+                        </label>
+                        {editing ? (
+                            <input
+                                id="admin-fullname"
+                                type="text"
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                className="w-full h-10 px-3 rounded-xl border border-border bg-soft text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                autoFocus
+                            />
+                        ) : (
+                            <p className="text-sm text-foreground font-medium">{displayUser?.full_name}</p>
+                        )}
+                    </div>
+
+                    {/* Email — read-only */}
+                    <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                            Correo electrónico
+                        </p>
+                        <div className="flex items-center gap-2 text-sm text-foreground">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            {displayUser?.email}
+                            <span className="text-xs text-muted-foreground">(no editable)</span>
+                        </div>
+                    </div>
+
+                    {/* Role — read-only */}
+                    <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                            Rol
+                        </p>
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-accent/15 text-accent">
+                            <Shield className="h-3.5 w-3.5" /> Administrador
+                        </span>
+                    </div>
+
+                    {/* Account status */}
+                    <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                            Estado de cuenta
+                        </p>
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-success/15 text-success">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Activo
+                        </span>
+                    </div>
+                </div>
+
+                {editing && (
+                    <div className="flex gap-3 mt-6 pt-5 border-t border-border">
+                        <Button
+                            onClick={() => void handleSave()}
+                            disabled={saving || !fullName.trim() || fullName.trim() === displayUser?.full_name}
+                            className="flex-1"
+                        >
+                            {saving ? (
+                                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                                <Save className="h-4 w-4 mr-2" />
+                            )}
+                            {saving ? "Guardando…" : "Guardar cambios"}
+                        </Button>
+                        <Button variant="outline" onClick={handleCancel} disabled={saving}>
+                            <X className="h-4 w-4 mr-2" /> Cancelar
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            {/* Account metadata */}
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-soft">
+                <h3 className="font-display font-bold text-primary mb-4">Detalles de cuenta</h3>
+                <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <div className="text-xs text-muted-foreground mb-0.5">ID de usuario</div>
+                        <div className="font-mono text-xs text-foreground truncate">{displayUser?.id}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-muted-foreground mb-0.5">Miembro desde</div>
+                        <div className="text-foreground">
+                            {displayUser?.created_at
+                                ? new Date(displayUser.created_at).toLocaleDateString("es-CO", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                })
+                                : "—"}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-muted-foreground mb-0.5">Última actualización</div>
+                        <div className="text-foreground">
+                            {displayUser?.updated_at
+                                ? new Date(displayUser.updated_at).toLocaleDateString("es-CO", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                })
+                                : "—"}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
