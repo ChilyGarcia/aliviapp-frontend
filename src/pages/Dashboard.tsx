@@ -52,6 +52,7 @@ const baseTabs: TabConfig[] = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [localUser, setLocalUser] = useState(user);
   const [active, setActive] = useState<TabKey>("home");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -135,7 +136,7 @@ const Dashboard = () => {
         />
       );
       case "plan": return <PlanPanel />;
-      case "profile": return <ProfilePanel user={user || undefined} />;
+      case "profile": return <ProfilePanel user={localUser || undefined} onUserUpdated={(u) => setLocalUser(u)} />;
     }
   };
 

@@ -14,6 +14,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useChatSocket } from "@/hooks/use-chat-socket";
 import { getUserInitials } from "@/utils/user.utils";
 import { toast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
+import { authService } from "@/services/auth.service";
 import { chatService } from "@/services/chat.service";
 import { schedulingService } from "@/services/scheduling.service";
 import { triageService } from "@/services/triage.service";
@@ -60,6 +62,9 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeft,
+  Pencil,
+  Save,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -244,373 +249,373 @@ const OverviewPanel = ({
     : 1;
 
   return (
-  <div className="space-y-6">
-    {newAppointmentIds.size > 0 && (
-      <div className="bg-success/10 border border-success/30 rounded-2xl p-4 flex items-start gap-3">
-        <Calendar className="h-5 w-5 text-success shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-foreground">
-            {newAppointmentIds.size === 1
-              ? "Un paciente agendó una nueva cita contigo"
-              : `${newAppointmentIds.size} pacientes agendaron nuevas citas contigo`}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Revisa tu calendario en la pestaña Agenda para ver los detalles.
-          </p>
-        </div>
-        <Button variant="hero" size="sm" onClick={() => onNavigate("agenda")}>
-          Ver calendario
-        </Button>
-      </div>
-    )}
-
-    <div className="bg-gradient-to-br from-primary to-primary-deep rounded-3xl p-6 lg:p-8 text-primary-foreground shadow-elegant">
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div className="min-w-0 max-w-2xl">
-          <p className="text-primary-foreground/80 text-sm">{dayGreeting()}</p>
-          <h2 className="font-display text-2xl lg:text-3xl font-bold">
-            {user?.full_name ?? "Profesional"}
-          </h2>
-          <p className="text-primary-foreground/80 text-sm mt-1">
-            {user?.email ?? "Panel profesional · AliviApp"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="h-2 w-2 rounded-full bg-success animate-pulse-soft" />
-          <span className="text-sm font-medium">
-            {loading ? "Cargando…" : activeChats.length > 0 ? "Chats activos" : "Sin chats activos"}
-          </span>
-        </div>
-      </div>
-      <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 xl:gap-4">
-        {[
-          {
-            label: "Chats activos",
-            value: loading ? "…" : String(activeChats.length),
-            icon: MessageCircle,
-          },
-          { label: "Citas hoy", value: String(sessionsToday), icon: Calendar },
-          { label: "Citas próximas", value: String(appointments.length), icon: AlertTriangle },
-          { label: "Satisfacción", value: loading ? "…" : satisfaction, icon: Star },
-        ].map((s) => (
-          <div key={s.label} className="bg-white/10 backdrop-blur rounded-2xl p-3 xl:p-4 border border-white/15">
-            <s.icon className="h-4 w-4 mb-1 opacity-80" />
-            <div className="text-2xl font-bold">{s.value}</div>
-            <div className="text-xs opacity-80">{s.label}</div>
+    <div className="space-y-6">
+      {newAppointmentIds.size > 0 && (
+        <div className="bg-success/10 border border-success/30 rounded-2xl p-4 flex items-start gap-3">
+          <Calendar className="h-5 w-5 text-success shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-foreground">
+              {newAppointmentIds.size === 1
+                ? "Un paciente agendó una nueva cita contigo"
+                : `${newAppointmentIds.size} pacientes agendaron nuevas citas contigo`}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Revisa tu calendario en la pestaña Agenda para ver los detalles.
+            </p>
           </div>
-        ))}
-      </div>
-    </div>
-
-    <div className="grid lg:grid-cols-3 gap-4 xl:gap-6">
-      <div className="lg:col-span-2 bg-card rounded-3xl shadow-soft border border-border p-5 xl:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display font-bold text-primary">Próximas citas</h3>
-          <Button variant="ghost" size="sm" onClick={() => onNavigate("agenda")}>
-            Ver agenda
+          <Button variant="hero" size="sm" onClick={() => onNavigate("agenda")}>
+            Ver calendario
           </Button>
         </div>
-        <div className="space-y-3">
-          {upcoming.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No tienes citas agendadas por pacientes.
+      )}
+
+      <div className="bg-gradient-to-br from-primary to-primary-deep rounded-3xl p-6 lg:p-8 text-primary-foreground shadow-elegant">
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="min-w-0 max-w-2xl">
+            <p className="text-primary-foreground/80 text-sm">{dayGreeting()}</p>
+            <h2 className="font-display text-2xl lg:text-3xl font-bold">
+              {user?.full_name ?? "Profesional"}
+            </h2>
+            <p className="text-primary-foreground/80 text-sm mt-1">
+              {user?.email ?? "Panel profesional · AliviApp"}
             </p>
-          ) : (
-            upcoming.map((session) => (
-            <div key={session.id} className="flex items-center gap-4 p-3 rounded-2xl bg-soft hover:bg-secondary transition-smooth">
-              <div className="flex flex-col items-center justify-center shrink-0 min-w-[3.25rem] px-2 py-2.5 rounded-2xl bg-primary/10 text-primary gap-1">
-                <Clock className="h-3 w-3 shrink-0" />
-                <span className="text-xs font-bold tabular-nums leading-none whitespace-nowrap">
-                  {formatAppointmentTime(session.scheduled_at)}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-foreground flex items-center gap-2">
-                  {session.patient_name}
-                  {newAppointmentIds.has(session.id) && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success font-bold">NUEVA</span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {session.topic} · {formatAppointmentDate(session.scheduled_at)}
-                </div>
-              </div>
-              <Button variant="hero" size="sm" onClick={() => onNavigate("agenda")}>
-                Ver
-              </Button>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse-soft" />
+            <span className="text-sm font-medium">
+              {loading ? "Cargando…" : activeChats.length > 0 ? "Chats activos" : "Sin chats activos"}
+            </span>
+          </div>
+        </div>
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 xl:gap-4">
+          {[
+            {
+              label: "Chats activos",
+              value: loading ? "…" : String(activeChats.length),
+              icon: MessageCircle,
+            },
+            { label: "Citas hoy", value: String(sessionsToday), icon: Calendar },
+            { label: "Citas próximas", value: String(appointments.length), icon: AlertTriangle },
+            { label: "Satisfacción", value: loading ? "…" : satisfaction, icon: Star },
+          ].map((s) => (
+            <div key={s.label} className="bg-white/10 backdrop-blur rounded-2xl p-3 xl:p-4 border border-white/15">
+              <s.icon className="h-4 w-4 mb-1 opacity-80" />
+              <div className="text-2xl font-bold">{s.value}</div>
+              <div className="text-xs opacity-80">{s.label}</div>
             </div>
-            ))
-          )}
+          ))}
         </div>
       </div>
 
-      <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-cta" />
-            <h3 className="font-display font-bold text-primary">Triage IA</h3>
+      <div className="grid lg:grid-cols-3 gap-4 xl:gap-6">
+        <div className="lg:col-span-2 bg-card rounded-3xl shadow-soft border border-border p-5 xl:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display font-bold text-primary">Próximas citas</h3>
+            <Button variant="ghost" size="sm" onClick={() => onNavigate("agenda")}>
+              Ver agenda
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => onNavigate("inbox")}>
-            Chats
-          </Button>
+          <div className="space-y-3">
+            {upcoming.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No tienes citas agendadas por pacientes.
+              </p>
+            ) : (
+              upcoming.map((session) => (
+                <div key={session.id} className="flex items-center gap-4 p-3 rounded-2xl bg-soft hover:bg-secondary transition-smooth">
+                  <div className="flex flex-col items-center justify-center shrink-0 min-w-[3.25rem] px-2 py-2.5 rounded-2xl bg-primary/10 text-primary gap-1">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span className="text-xs font-bold tabular-nums leading-none whitespace-nowrap">
+                      {formatAppointmentTime(session.scheduled_at)}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-foreground flex items-center gap-2">
+                      {session.patient_name}
+                      {newAppointmentIds.has(session.id) && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success font-bold">NUEVA</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {session.topic} · {formatAppointmentDate(session.scheduled_at)}
+                    </div>
+                  </div>
+                  <Button variant="hero" size="sm" onClick={() => onNavigate("agenda")}>
+                    Ver
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Pacientes con chat activo priorizados por riesgo emocional. Toca uno para ver el detalle.
-        </p>
-        <div className="space-y-3 max-h-80 overflow-y-auto">
-          {loading ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Cargando triage…</p>
-          ) : triageAlerts.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No hay triage de pacientes con chat activo.
+
+        <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-cta" />
+              <h3 className="font-display font-bold text-primary">Triage IA</h3>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => onNavigate("inbox")}>
+              Chats
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Pacientes con chat activo priorizados por riesgo emocional. Toca uno para ver el detalle.
+          </p>
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {loading ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Cargando triage…</p>
+            ) : triageAlerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No hay triage de pacientes con chat activo.
+              </p>
+            ) : (
+              triageAlerts.map((alert) => (
+                <button
+                  key={alert.patient_id}
+                  type="button"
+                  onClick={() => setSelectedTriage(alert)}
+                  className="w-full text-left rounded-2xl border border-border bg-soft/70 p-3 hover:bg-secondary transition-smooth"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {alert.patient_name}
+                    </p>
+                    <span
+                      className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0",
+                        TRIAGE_LEVEL_STYLES[alert.triage.level] ?? "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {alert.triage.label}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mb-0.5">
+                    Carga emocional: {alert.triage.percentage}%
+                  </p>
+                  <p className="text-[11px] text-foreground/80 line-clamp-2">{alert.triage.advice}</p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <TriageResultDialog
+        open={Boolean(selectedTriage)}
+        onOpenChange={(open) => !open && setSelectedTriage(null)}
+        triage={selectedTriage?.triage ?? null}
+        title={selectedTriage ? `Triage de ${selectedTriage.patient_name}` : "Detalle del triage"}
+        footer={
+          selectedTriage ? (
+            <>
+              <Button variant="outline" onClick={() => setSelectedTriage(null)}>
+                Cerrar
+              </Button>
+              <Button
+                variant="hero"
+                onClick={() => {
+                  const draft: TriageReplyDraft = {
+                    triage_assessment_id: selectedTriage.triage.id,
+                    triage_label: selectedTriage.triage.label,
+                  };
+                  const patientId = selectedTriage.patient_id;
+                  setSelectedTriage(null);
+                  onOpenPatientChat(patientId, draft);
+                }}
+              >
+                Responder en el chat
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
+          <div className="mb-1">
+            <h3 className="font-display font-bold text-primary">Citas este mes</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Por semana del calendario · sin canceladas
+              {metrics ? ` · total ${metrics.sessions_this_month}` : ""}
+            </p>
+          </div>
+          {loading || !metrics ? (
+            <p className="text-sm text-muted-foreground py-10 text-center">Cargando gráfica…</p>
+          ) : metrics.sessions_by_week.every((item) => item.count === 0) ? (
+            <p className="text-sm text-muted-foreground py-10 text-center">
+              Aún no hay citas registradas este mes.
             </p>
           ) : (
-            triageAlerts.map((alert) => (
-              <button
-                key={alert.patient_id}
-                type="button"
-                onClick={() => setSelectedTriage(alert)}
-                className="w-full text-left rounded-2xl border border-border bg-soft/70 p-3 hover:bg-secondary transition-smooth"
-              >
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <p className="text-sm font-semibold text-foreground truncate">
-                    {alert.patient_name}
-                  </p>
-                  <span
-                    className={cn(
-                      "text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0",
-                      TRIAGE_LEVEL_STYLES[alert.triage.level] ?? "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {alert.triage.label}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mb-0.5">
-                  Carga emocional: {alert.triage.percentage}%
-                </p>
-                <p className="text-[11px] text-foreground/80 line-clamp-2">{alert.triage.advice}</p>
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
+            (() => {
+              const weeks = monthWeekRanges(new Date());
+              const scaleMax = Math.max(maxWeek, 3);
+              const ticks = Array.from({ length: scaleMax + 1 }, (_, i) => scaleMax - i);
 
-    <TriageResultDialog
-      open={Boolean(selectedTriage)}
-      onOpenChange={(open) => !open && setSelectedTriage(null)}
-      triage={selectedTriage?.triage ?? null}
-      title={selectedTriage ? `Triage de ${selectedTriage.patient_name}` : "Detalle del triage"}
-      footer={
-        selectedTriage ? (
-          <>
-            <Button variant="outline" onClick={() => setSelectedTriage(null)}>
-              Cerrar
-            </Button>
-            <Button
-              variant="hero"
-              onClick={() => {
-                const draft: TriageReplyDraft = {
-                  triage_assessment_id: selectedTriage.triage.id,
-                  triage_label: selectedTriage.triage.label,
-                };
-                const patientId = selectedTriage.patient_id;
-                setSelectedTriage(null);
-                onOpenPatientChat(patientId, draft);
-              }}
-            >
-              Responder en el chat
-            </Button>
-          </>
-        ) : undefined
-      }
-    />
+              return (
+                <div className="mt-4">
+                  <div className="relative h-52 pl-7">
+                    <div className="absolute inset-0 left-7 right-0 top-1 bottom-7 pointer-events-none">
+                      {ticks.map((tick) => (
+                        <div
+                          key={tick}
+                          className="absolute left-0 right-0 border-t border-border/60"
+                          style={{ bottom: `${(tick / scaleMax) * 100}%` }}
+                        >
+                          <span className="absolute -left-7 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground w-5 text-right">
+                            {tick}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
 
-    <div className="grid lg:grid-cols-2 gap-6">
-      <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
-        <div className="mb-1">
-          <h3 className="font-display font-bold text-primary">Citas este mes</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Por semana del calendario · sin canceladas
-            {metrics ? ` · total ${metrics.sessions_this_month}` : ""}
-          </p>
-        </div>
-        {loading || !metrics ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">Cargando gráfica…</p>
-        ) : metrics.sessions_by_week.every((item) => item.count === 0) ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">
-            Aún no hay citas registradas este mes.
-          </p>
-        ) : (
-          (() => {
-            const weeks = monthWeekRanges(new Date());
-            const scaleMax = Math.max(maxWeek, 3);
-            const ticks = Array.from({ length: scaleMax + 1 }, (_, i) => scaleMax - i);
+                    <div className="absolute left-7 right-0 top-1 bottom-7 flex items-end gap-2 sm:gap-3">
+                      {metrics.sessions_by_week.map((item, index) => {
+                        const range = weeks[index];
+                        const heightPct = item.count === 0 ? 0 : (item.count / scaleMax) * 100;
+                        return (
+                          <div
+                            key={item.label}
+                            className="relative flex-1 h-full min-w-0 flex items-end justify-center"
+                            title={range ? `${range.label}: ${item.count} cita${item.count === 1 ? "" : "s"}` : undefined}
+                          >
+                            {item.count > 0 && (
+                              <span
+                                className="absolute left-1/2 -translate-x-1/2 text-[11px] font-semibold text-foreground tabular-nums"
+                                style={{ bottom: `calc(${heightPct}% + 4px)` }}
+                              >
+                                {item.count}
+                              </span>
+                            )}
+                            <div
+                              className={cn(
+                                "w-full max-w-[2.75rem] rounded-t-lg",
+                                item.count > 0 ? "bg-cta" : "bg-transparent"
+                              )}
+                              style={{ height: `${heightPct}%` }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
 
-            return (
-              <div className="mt-4">
-                <div className="relative h-52 pl-7">
-                  <div className="absolute inset-0 left-7 right-0 top-1 bottom-7 pointer-events-none">
-                    {ticks.map((tick) => (
-                      <div
-                        key={tick}
-                        className="absolute left-0 right-0 border-t border-border/60"
-                        style={{ bottom: `${(tick / scaleMax) * 100}%` }}
-                      >
-                        <span className="absolute -left-7 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground w-5 text-right">
-                          {tick}
-                        </span>
-                      </div>
-                    ))}
+                    <div className="absolute left-7 right-0 bottom-0 flex gap-2 sm:gap-3">
+                      {metrics.sessions_by_week.map((item, index) => {
+                        const range = weeks[index];
+                        return (
+                          <div key={item.label} className="flex-1 min-w-0 text-center">
+                            <p className="text-[10px] font-semibold text-foreground truncate">
+                              {range?.shortLabel ?? item.label}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground truncate hidden sm:block">
+                              {range?.daysLabel}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div className="absolute left-7 right-0 top-1 bottom-7 flex items-end gap-2 sm:gap-3">
+                  <div className="mt-4 space-y-1.5 border-t border-border pt-3">
                     {metrics.sessions_by_week.map((item, index) => {
                       const range = weeks[index];
-                      const heightPct = item.count === 0 ? 0 : (item.count / scaleMax) * 100;
+                      if (!range || item.count === 0) return null;
                       return (
                         <div
-                          key={item.label}
-                          className="relative flex-1 h-full min-w-0 flex items-end justify-center"
-                          title={range ? `${range.label}: ${item.count} cita${item.count === 1 ? "" : "s"}` : undefined}
+                          key={`${item.label}-detail`}
+                          className="flex items-center justify-between text-xs gap-2"
                         >
-                          {item.count > 0 && (
-                            <span
-                              className="absolute left-1/2 -translate-x-1/2 text-[11px] font-semibold text-foreground tabular-nums"
-                              style={{ bottom: `calc(${heightPct}% + 4px)` }}
-                            >
-                              {item.count}
-                            </span>
-                          )}
-                          <div
-                            className={cn(
-                              "w-full max-w-[2.75rem] rounded-t-lg",
-                              item.count > 0 ? "bg-cta" : "bg-transparent"
-                            )}
-                            style={{ height: `${heightPct}%` }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="absolute left-7 right-0 bottom-0 flex gap-2 sm:gap-3">
-                    {metrics.sessions_by_week.map((item, index) => {
-                      const range = weeks[index];
-                      return (
-                        <div key={item.label} className="flex-1 min-w-0 text-center">
-                          <p className="text-[10px] font-semibold text-foreground truncate">
-                            {range?.shortLabel ?? item.label}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground truncate hidden sm:block">
-                            {range?.daysLabel}
-                          </p>
+                          <span className="text-muted-foreground truncate">{range.label}</span>
+                          <span className="font-semibold text-foreground tabular-nums shrink-0">
+                            {item.count} cita{item.count === 1 ? "" : "s"}
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
+              );
+            })()
+          )}
+        </div>
 
-                <div className="mt-4 space-y-1.5 border-t border-border pt-3">
-                  {metrics.sessions_by_week.map((item, index) => {
-                    const range = weeks[index];
-                    if (!range || item.count === 0) return null;
-                    return (
-                      <div
-                        key={`${item.label}-detail`}
-                        className="flex items-center justify-between text-xs gap-2"
-                      >
-                        <span className="text-muted-foreground truncate">{range.label}</span>
-                        <span className="font-semibold text-foreground tabular-nums shrink-0">
-                          {item.count} cita{item.count === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                    );
-                  })}
+        <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
+          <h3 className="font-display font-bold text-primary mb-4">Motivos de consulta</h3>
+          {loading || !metrics ? (
+            <p className="text-sm text-muted-foreground py-10 text-center">Cargando…</p>
+          ) : metrics.top_topics.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-10 text-center">
+              Los temas aparecerán cuando tengas citas agendadas.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {metrics.top_topics.map((topic) => (
+                <div key={topic.label}>
+                  <div className="flex justify-between text-xs mb-1 gap-2">
+                    <span className="font-medium truncate">{topic.label}</span>
+                    <span className="text-muted-foreground shrink-0">
+                      {topic.percentage}% · {topic.count}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-soft rounded-full overflow-hidden">
+                    <div className="h-full bg-cta rounded-full" style={{ width: `${topic.percentage}%` }} />
+                  </div>
                 </div>
-              </div>
-            );
-          })()
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
-        <h3 className="font-display font-bold text-primary mb-4">Motivos de consulta</h3>
-        {loading || !metrics ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">Cargando…</p>
-        ) : metrics.top_topics.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">
-            Los temas aparecerán cuando tengas citas agendadas.
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-display font-bold text-primary">Reseñas recientes</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {summary && summary.total_ratings > 0
+                ? `Promedio ${summary.average_score.toFixed(1)} · ${summary.total_ratings} reseña${summary.total_ratings === 1 ? "" : "s"}`
+                : "Aún sin calificaciones de pacientes"}
+            </p>
+          </div>
+          <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+        </div>
+        {loading ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">Cargando reseñas…</p>
+        ) : !summary || summary.recent_ratings.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            Aparecerán cuando pacientes con conversación activa te evalúen.
           </p>
         ) : (
-          <div className="space-y-3">
-            {metrics.top_topics.map((topic) => (
-              <div key={topic.label}>
-                <div className="flex justify-between text-xs mb-1 gap-2">
-                  <span className="font-medium truncate">{topic.label}</span>
-                  <span className="text-muted-foreground shrink-0">
-                    {topic.percentage}% · {topic.count}
-                  </span>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {summary.recent_ratings.map((rating) => (
+              <div key={rating.id} className="rounded-2xl border border-border bg-soft/70 p-4">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="font-semibold text-sm text-foreground">{rating.patient_name}</p>
+                  <div className="flex items-center gap-0.5">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <Star
+                        key={value}
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          value <= rating.score
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-muted-foreground/30"
+                        )}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className="h-2 bg-soft rounded-full overflow-hidden">
-                  <div className="h-full bg-cta rounded-full" style={{ width: `${topic.percentage}%` }} />
-                </div>
+                {rating.comment ? (
+                  <p className="text-xs text-muted-foreground line-clamp-3">{rating.comment}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Sin comentario</p>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
     </div>
-
-    <div className="bg-card rounded-3xl shadow-soft border border-border p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="font-display font-bold text-primary">Reseñas recientes</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {summary && summary.total_ratings > 0
-              ? `Promedio ${summary.average_score.toFixed(1)} · ${summary.total_ratings} reseña${summary.total_ratings === 1 ? "" : "s"}`
-              : "Aún sin calificaciones de pacientes"}
-          </p>
-        </div>
-        <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-      </div>
-      {loading ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">Cargando reseñas…</p>
-      ) : !summary || summary.recent_ratings.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          Aparecerán cuando pacientes con conversación activa te evalúen.
-        </p>
-      ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
-          {summary.recent_ratings.map((rating) => (
-            <div key={rating.id} className="rounded-2xl border border-border bg-soft/70 p-4">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <p className="font-semibold text-sm text-foreground">{rating.patient_name}</p>
-                <div className="flex items-center gap-0.5">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <Star
-                      key={value}
-                      className={cn(
-                        "h-3.5 w-3.5",
-                        value <= rating.score
-                          ? "fill-amber-400 text-amber-400"
-                          : "text-muted-foreground/30"
-                      )}
-                    />
-                  ))}
-                </div>
-              </div>
-              {rating.comment ? (
-                <p className="text-xs text-muted-foreground line-clamp-3">{rating.comment}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">Sin comentario</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  </div>
   );
 };
 
@@ -810,10 +815,10 @@ const InboxPanel = ({
 
     const metadata = activeTriageReply
       ? {
-          context: "triage_reply" as const,
-          triage_assessment_id: activeTriageReply.triage_assessment_id,
-          triage_label: activeTriageReply.triage_label,
-        }
+        context: "triage_reply" as const,
+        triage_assessment_id: activeTriageReply.triage_assessment_id,
+        triage_label: activeTriageReply.triage_label,
+      }
       : undefined;
 
     if (connected) {
@@ -924,11 +929,11 @@ const InboxPanel = ({
                       ? "Chat cerrado"
                       : standby
                         ? "Periodo en espera (el paciente debe enviar para renovar)"
-                      : isPeerTyping
-                        ? "Escribiendo…"
-                        : connected
-                          ? "En línea · conectado"
-                          : "Conectando…"}
+                        : isPeerTyping
+                          ? "Escribiendo…"
+                          : connected
+                            ? "En línea · conectado"
+                            : "Conectando…"}
                   </div>
                 </div>
               </div>
@@ -1438,8 +1443,8 @@ const PatientsPanel = () => {
                   <span className={cn(
                     "text-[10px] px-2 py-0.5 rounded-full font-bold",
                     p.status === "Activo" ? "bg-success/10 text-success" :
-                    p.status === "Pausa" ? "bg-amber-500/10 text-amber-700" :
-                    "bg-muted text-muted-foreground"
+                      p.status === "Pausa" ? "bg-amber-500/10 text-amber-700" :
+                        "bg-muted text-muted-foreground"
                   )}>{p.status}</span>
                 </td>
                 <td className="px-5 py-3">
@@ -1520,6 +1525,10 @@ const NotesPanel = () => {
 /* ---------- PROFILE ---------- */
 const ProfilePanel = () => {
   const { user } = useAuth();
+  const [localUser, setLocalUser] = useState(user);
+  const [editing, setEditing] = useState(false);
+  const [fullName, setFullName] = useState(user?.full_name ?? "");
+  const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<ProfessionalRatingSummary | null>(null);
 
   useEffect(() => {
@@ -1537,100 +1546,138 @@ const ProfilePanel = () => {
     };
   }, []);
 
+  const handleSave = async () => {
+    if (!fullName.trim() || fullName.trim() === localUser?.full_name) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await apiFetch<AuthUser>("/users/me/", {
+        method: "PATCH",
+        body: JSON.stringify({ full_name: fullName.trim() }),
+      });
+      const stored = authService.getUser();
+      if (stored) {
+        authService.setSession({
+          access: authService.getAccessToken()!,
+          refresh: localStorage.getItem("auth_refresh_token") ?? "",
+          user: updated,
+        });
+      }
+      setLocalUser(updated);
+      setEditing(false);
+      toast({ title: "Nombre actualizado correctamente." });
+    } catch {
+      toast({ title: "No se pudo actualizar el perfil.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const displayUser = localUser ?? user;
   const average = summary?.average_score ?? 0;
   const total = summary?.total_ratings ?? 0;
   const roundedStars = Math.round(average);
 
   return (
-  <div className="grid lg:grid-cols-3 gap-6">
-    <div className="bg-card rounded-3xl shadow-soft border border-border p-6 text-center">
-      <div className="h-24 w-24 mx-auto rounded-full bg-cta flex items-center justify-center text-3xl font-bold text-primary-foreground mb-3">
-        {user ? getUserInitials(user.full_name) : "PR"}
-      </div>
-      <h3 className="font-display font-bold text-primary text-lg">{user?.full_name ?? "Profesional"}</h3>
-      <p className="text-sm text-muted-foreground">Psicología clínica</p>
-      <p className="text-xs text-muted-foreground mt-1">{user?.email}</p>
-      <div className="flex items-center justify-center gap-1 mt-3">
-        {[1, 2, 3, 4, 5].map((value) => (
-          <Star
-            key={value}
-            className={cn(
-              "h-4 w-4",
-              value <= roundedStars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"
-            )}
-          />
-        ))}
-        <span className="text-xs ml-1 text-muted-foreground">
-          {total > 0 ? `(${average.toFixed(1)} · ${total} reseña${total === 1 ? "" : "s"})` : "(Sin reseñas aún)"}
-        </span>
-      </div>
-      <Button variant="outline" size="sm" className="mt-4 w-full">Editar perfil público</Button>
-    </div>
-
-    <div className="lg:col-span-2 bg-card rounded-3xl shadow-soft border border-border p-6">
-      <h3 className="font-display font-bold text-primary mb-4">Información profesional</h3>
-      <div className="grid md:grid-cols-2 gap-4 text-sm">
-        <div>
-          <label className="text-xs text-muted-foreground">Nombre completo</label>
-          <input defaultValue="Camila Rojas Méndez" className="w-full mt-1 bg-soft rounded-xl px-3 py-2 outline-none" />
+    <div className="grid lg:grid-cols-3 gap-6">
+      {/* Left card — avatar + rating */}
+      <div className="bg-card rounded-3xl shadow-soft border border-border p-6 text-center">
+        <div className="h-24 w-24 mx-auto rounded-full bg-cta flex items-center justify-center text-3xl font-bold text-primary-foreground mb-3">
+          {displayUser ? getUserInitials(displayUser.full_name) : "PR"}
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Licencia profesional</label>
-          <input defaultValue="PSI-2398" className="w-full mt-1 bg-soft rounded-xl px-3 py-2 outline-none" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Email</label>
-          <input defaultValue="camila.rojas@aliviapp.com" className="w-full mt-1 bg-soft rounded-xl px-3 py-2 outline-none" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Teléfono</label>
-          <input defaultValue="+57 300 123 4567" className="w-full mt-1 bg-soft rounded-xl px-3 py-2 outline-none" />
-        </div>
-        <div className="md:col-span-2">
-          <label className="text-xs text-muted-foreground">Especialidades</label>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {["Ansiedad", "Estrés laboral", "TCC", "Mindfulness", "Duelo"].map((t) => (
-              <span key={t} className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">{t}</span>
-            ))}
-          </div>
-        </div>
-        <div className="md:col-span-2">
-          <label className="text-xs text-muted-foreground">Bio profesional</label>
-          <textarea
-            defaultValue="Psicóloga clínica con 10+ años de experiencia en terapia cognitivo-conductual. Especializada en bienestar laboral y manejo de ansiedad."
-            className="w-full mt-1 bg-soft rounded-xl px-3 py-2 outline-none min-h-[100px]"
-          />
-        </div>
-      </div>
-
-      <div className="mt-6 pt-6 border-t border-border">
-        <h4 className="font-display font-bold text-primary mb-3">Disponibilidad</h4>
-        <div className="grid grid-cols-7 gap-2">
-          {["L", "M", "X", "J", "V", "S", "D"].map((d, i) => (
-            <button
-              key={d}
+        <h3 className="font-display font-bold text-primary text-lg">{displayUser?.full_name ?? "Profesional"}</h3>
+        <p className="text-sm text-muted-foreground">Psicología clínica</p>
+        <p className="text-xs text-muted-foreground mt-1">{displayUser?.email}</p>
+        <div className="flex items-center justify-center gap-1 mt-3">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <Star
+              key={value}
               className={cn(
-                "py-3 rounded-xl text-sm font-bold transition-smooth",
-                i < 5 ? "bg-success/10 text-success" : "bg-soft text-muted-foreground"
+                "h-4 w-4",
+                value <= roundedStars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"
               )}
-            >
-              {d}
-            </button>
+            />
           ))}
-        </div>
-        <div className="flex items-center gap-3 mt-4 p-3 rounded-2xl bg-soft">
-          <Heart className="h-5 w-5 text-cta" />
-          <div className="text-sm">
-            <div className="font-semibold">Modo disponible para chat</div>
-            <div className="text-xs text-muted-foreground">Recibirás nuevas conversaciones en tu bandeja.</div>
-          </div>
-          <div className="ml-auto h-6 w-11 rounded-full bg-success relative">
-            <div className="absolute right-0.5 top-0.5 h-5 w-5 rounded-full bg-white" />
-          </div>
+          <span className="text-xs ml-1 text-muted-foreground">
+            {total > 0 ? `(${average.toFixed(1)} · ${total} reseña${total === 1 ? "" : "s"})` : "(Sin reseñas aún)"}
+          </span>
         </div>
       </div>
+
+      {/* Right card — editable info */}
+      <div className="lg:col-span-2 bg-card rounded-3xl shadow-soft border border-border p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display font-bold text-primary">Información profesional</h3>
+          {!editing && (
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+            </Button>
+          )}
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4 text-sm">
+          {/* Nombre — editable */}
+          <div className="md:col-span-2">
+            <label htmlFor="pro-fullname" className="text-xs text-muted-foreground">Nombre completo</label>
+            {editing ? (
+              <input
+                id="pro-fullname"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoFocus
+                className="w-full mt-1 bg-soft rounded-xl px-3 py-2 outline-none border border-border focus:ring-2 focus:ring-primary/30 text-sm"
+              />
+            ) : (
+              <p className="mt-1 font-medium text-foreground">{displayUser?.full_name ?? "—"}</p>
+            )}
+          </div>
+
+          {/* Email — read-only */}
+          <div>
+            <p className="text-xs text-muted-foreground">Correo electrónico</p>
+            <p className="mt-1 text-foreground">{displayUser?.email ?? "—"}</p>
+          </div>
+
+          {/* Role — read-only */}
+          <div>
+            <p className="text-xs text-muted-foreground">Rol</p>
+            <p className="mt-1 text-foreground">Profesional</p>
+          </div>
+
+          {/* Member since */}
+          <div>
+            <p className="text-xs text-muted-foreground">Miembro desde</p>
+            <p className="mt-1 text-foreground">
+              {displayUser?.created_at
+                ? new Date(displayUser.created_at).toLocaleDateString("es-CO", { month: "short", year: "numeric" })
+                : "—"}
+            </p>
+          </div>
+
+          {/* ID */}
+          <div>
+            <p className="text-xs text-muted-foreground">ID</p>
+            <p className="mt-1 font-mono text-xs text-foreground truncate">{displayUser?.id ?? "—"}</p>
+          </div>
+        </div>
+
+        {/* Save / cancel */}
+        {editing && (
+          <div className="flex gap-2 mt-5 pt-4 border-t border-border">
+            <Button size="sm" disabled={saving || !fullName.trim()} onClick={() => void handleSave()} className="flex-1">
+              {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+              {saving ? "Guardando…" : "Guardar cambios"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setFullName(displayUser?.full_name ?? ""); setEditing(false); }} disabled={saving}>
+              <X className="h-3.5 w-3.5 mr-1" /> Cancelar
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
-  </div>
   );
 };
 
