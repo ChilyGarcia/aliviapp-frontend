@@ -7,6 +7,12 @@ interface ProtectedRouteProps {
     role?: UserRole;
 }
 
+function roleFallback(role: UserRole | undefined): string {
+    if (role === "PROFESSIONAL") return "/psicologo";
+    if (role === "ADMIN") return "/admin";
+    return "/panel";
+}
+
 export function ProtectedRoute({ children, role }: ProtectedRouteProps) {
     if (!authService.isAuthenticated()) {
         return <Navigate to="/login" replace />;
@@ -14,8 +20,7 @@ export function ProtectedRoute({ children, role }: ProtectedRouteProps) {
 
     const user = authService.getUser();
     if (role && user?.role !== role) {
-        const fallback = user?.role === "PROFESSIONAL" ? "/psicologo" : "/panel";
-        return <Navigate to={fallback} replace />;
+        return <Navigate to={roleFallback(user?.role)} replace />;
     }
 
     return <>{children}</>;

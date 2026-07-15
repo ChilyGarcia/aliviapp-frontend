@@ -93,7 +93,7 @@ const Login = () => {
         description: `Hola ${response.user.full_name}, acceso verificado correctamente.`,
       });
 
-      navigate(response.user.role === "PROFESSIONAL" ? "/psicologo" : "/panel");
+      navigate(response.user.role === "PROFESSIONAL" ? "/psicologo" : response.user.role === "ADMIN" ? "/admin" : "/panel");
     } catch (error) {
       toast({
         title: "Error de autenticación",
