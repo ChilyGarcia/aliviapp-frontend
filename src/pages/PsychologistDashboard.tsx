@@ -9,6 +9,7 @@ import {
   hasUpcomingAppointment,
 } from "@/components/dashboard/ChatAppointmentReminder";
 import { ChatMessageBubble } from "@/components/dashboard/ChatMessageBubble";
+import { ChatClinicalNoteButton } from "@/components/dashboard/ChatClinicalNoteButton";
 import { TriageResultDialog } from "@/components/dashboard/TriageResultDialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useChatSocket } from "@/hooks/use-chat-socket";
@@ -25,8 +26,11 @@ import {
   type PatientTriageAlert,
 } from "@/services/ratings.service";
 import { usersService } from "@/services/users.service";
+import { clinicalNotesService } from "@/services/clinical-notes.service";
 import type { User as AuthUser } from "@/types/auth.types";
 import type { Conversation, Message, TriageReplyDraft } from "@/types/chat.types";
+import type { ClinicalNote } from "@/types/clinical-notes.types";
+import { clinicalNoteCategoryLabel } from "@/types/clinical-notes.types";
 import type {
   ProfessionalMetrics,
   ProfessionalRatingSummary,
@@ -57,7 +61,6 @@ import {
   Phone,
   Video,
   MoreVertical,
-  Download,
   Bell,
   LogOut,
   PanelLeftClose,
@@ -65,6 +68,7 @@ import {
   Pencil,
   Save,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -946,6 +950,13 @@ const InboxPanel = ({
                     matchField="patient_id"
                   />
                 )}
+                {activePatient && (
+                  <ChatClinicalNoteButton
+                    conversationId={active.id}
+                    patientId={active.patient_id}
+                    patientName={activePatient.full_name}
+                  />
+                )}
                 <Button variant="ghost" size="icon" disabled><Phone className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="icon" disabled><Video className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="icon" disabled><MoreVertical className="h-4 w-4" /></Button>
@@ -1466,57 +1477,186 @@ const PatientsPanel = () => {
 };
 
 /* ---------- NOTES ---------- */
+const formatClinicalNoteDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+
+const formatClinicalNoteDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("es-CO", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
 const NotesPanel = () => {
-  const [selected, setSelected] = useState(0);
-  const notes = [
-    { patient: "Sofía López", date: "30 abr 2026", title: "Sesión inicial · Insomnio y ansiedad", tags: ["Ansiedad", "Sueño"] },
-    { patient: "Daniel Morales", date: "29 abr 2026", title: "Seguimiento · Carga laboral", tags: ["Estrés laboral"] },
-    { patient: "Mateo Ruiz", date: "28 abr 2026", title: "Técnicas de regulación emocional", tags: ["TCC"] },
-  ];
+  const [notes, setNotes] = useState<ClinicalNote[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [patientFilter, setPatientFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await clinicalNotesService.listMine();
+        if (cancelled) return;
+        setNotes(result);
+        setSelectedId(result[0]?.id ?? null);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "No se pudieron cargar las notas");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const patients = Array.from(
+    new Map(notes.map((n) => [n.patient_id, n.patient_name])).entries()
+  );
+  const visibleNotes = patientFilter
+    ? notes.filter((n) => n.patient_id === patientFilter)
+    : notes;
+  const selected = notes.find((n) => n.id === selectedId) ?? null;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-10rem)] text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" /> Cargando notas clínicas…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-10rem)] text-sm text-destructive">
+        {error}
+      </div>
+    );
+  }
+
   return (
     <div className="grid lg:grid-cols-[300px_1fr] gap-4 h-[calc(100vh-10rem)]">
       <div className="bg-card rounded-3xl shadow-soft border border-border p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display font-bold text-primary">Notas clínicas</h3>
-          <Button variant="hero" size="icon" className="h-8 w-8"><Plus className="h-4 w-4" /></Button>
-        </div>
-        <div className="space-y-2">
-          {notes.map((n, i) => (
+        <h3 className="font-display font-bold text-primary mb-3">Notas clínicas</h3>
+
+        {patients.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
             <button
-              key={i}
-              onClick={() => setSelected(i)}
+              onClick={() => setPatientFilter(null)}
               className={cn(
-                "w-full text-left p-3 rounded-2xl border transition-smooth",
-                selected === i ? "bg-primary/5 border-primary" : "bg-soft border-transparent hover:bg-secondary"
+                "text-xs px-2.5 py-1 rounded-full border transition-smooth",
+                patientFilter === null
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-soft border-transparent hover:bg-secondary"
               )}
             >
-              <div className="font-semibold text-sm">{n.patient}</div>
-              <div className="text-xs text-muted-foreground truncate">{n.title}</div>
-              <div className="text-[10px] text-muted-foreground mt-1">{n.date}</div>
+              Todos
             </button>
-          ))}
-        </div>
+            {patients.map(([id, name]) => (
+              <button
+                key={id}
+                onClick={() => setPatientFilter(id)}
+                className={cn(
+                  "text-xs px-2.5 py-1 rounded-full border transition-smooth",
+                  patientFilter === id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-soft border-transparent hover:bg-secondary"
+                )}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {visibleNotes.length === 0 ? (
+          <p className="text-sm text-muted-foreground p-3">
+            Aún no hay notas clínicas. Regístralas desde el chat con cada paciente.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {visibleNotes.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => setSelectedId(n.id)}
+                className={cn(
+                  "w-full text-left p-3 rounded-2xl border transition-smooth",
+                  selectedId === n.id
+                    ? "bg-primary/5 border-primary"
+                    : "bg-soft border-transparent hover:bg-secondary"
+                )}
+              >
+                <div className="font-semibold text-sm">{n.patient_name}</div>
+                <div className="text-xs text-muted-foreground truncate">{n.reason}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  {formatClinicalNoteDate(n.created_at)}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+
       <div className="bg-card rounded-3xl shadow-soft border border-border p-6 overflow-y-auto">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-          <div>
-            <h2 className="font-display font-bold text-primary text-xl">{notes[selected].title}</h2>
-            <p className="text-xs text-muted-foreground">{notes[selected].patient} · {notes[selected].date}</p>
+        {!selected ? (
+          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+            Selecciona una nota para ver el detalle.
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm"><Download className="h-4 w-4" /> Exportar</Button>
-            <Button variant="hero" size="sm">Guardar</Button>
-          </div>
-        </div>
-        <div className="flex gap-2 mb-4 flex-wrap">
-          {notes[selected].tags.map((t) => (
-            <span key={t} className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">{t}</span>
-          ))}
-        </div>
-        <textarea
-          defaultValue={`Motivo de consulta:\nPaciente refiere insomnio recurrente desde hace 2 semanas, asociado a sobrecarga laboral.\n\nObservaciones:\n- Discurso coherente, afecto ansioso.\n- Refiere rumiación nocturna.\n\nPlan terapéutico:\n1. Higiene del sueño.\n2. Técnica de respiración 4-7-8.\n3. Diario emocional diario.\n\nPróxima sesión: 7 mayo 2026.`}
-          className="w-full min-h-[400px] bg-soft rounded-2xl p-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 font-mono leading-relaxed"
-        />
+        ) : (
+          <>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+              <div>
+                <h2 className="font-display font-bold text-primary text-xl">{selected.reason}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {selected.patient_name} · Registrada el {formatClinicalNoteDateTime(selected.created_at)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {selected.categories.map((c) => (
+                <span
+                  key={c}
+                  className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium"
+                >
+                  {clinicalNoteCategoryLabel(c)}
+                </span>
+              ))}
+            </div>
+
+            <div className="space-y-4 text-sm">
+              {selected.observations && (
+                <div>
+                  <h4 className="font-semibold text-primary mb-1">Observaciones</h4>
+                  <p className="whitespace-pre-line text-muted-foreground">{selected.observations}</p>
+                </div>
+              )}
+              {selected.therapeutic_plan && (
+                <div>
+                  <h4 className="font-semibold text-primary mb-1">Plan terapéutico</h4>
+                  <p className="whitespace-pre-line text-muted-foreground">{selected.therapeutic_plan}</p>
+                </div>
+              )}
+              <div>
+                <h4 className="font-semibold text-primary mb-1">Próxima sesión estimada</h4>
+                <p className="text-muted-foreground">
+                  {selected.next_session_at
+                    ? formatClinicalNoteDateTime(selected.next_session_at)
+                    : "No programada"}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
