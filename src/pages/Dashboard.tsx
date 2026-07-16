@@ -116,6 +116,7 @@ const Dashboard = () => {
           initialProfessionalId={chatTargetProfessionalId}
           onProfessionalHandled={() => setChatTargetProfessionalId(null)}
           onUnreadChange={setChatUnread}
+          onRequestPlan={() => setActive("plan")}
         />
       );
       case "checkins": return <CheckInsPanel />;

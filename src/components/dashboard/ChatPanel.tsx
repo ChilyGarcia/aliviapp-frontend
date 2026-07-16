@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Phone, Video, MoreVertical, Search, Plus, X, ArrowLeft, Calendar } from "lucide-react";
+import {
+  Send,
+  Phone,
+  Video,
+  MoreVertical,
+  Search,
+  Plus,
+  X,
+  ArrowLeft,
+  Calendar,
+  MessageCircle,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -78,10 +90,12 @@ export const ChatPanel = ({
   initialProfessionalId,
   onProfessionalHandled,
   onUnreadChange,
+  onRequestPlan,
 }: {
   initialProfessionalId?: string | null;
   onProfessionalHandled?: () => void;
   onUnreadChange?: (unreadTotal: number) => void;
+  onRequestPlan?: () => void;
 }) => {
   const { user } = useAuth();
   const isMobile = useIsMobile();
@@ -95,12 +109,14 @@ export const ChatPanel = ({
   const [showPicker, setShowPicker] = useState(false);
   const [professionals, setProfessionals] = useState<User[]>([]);
   const [loadingProfessionals, setLoadingProfessionals] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [triageDetail, setTriageDetail] = useState<TriageResult | null>(null);
   const [triageDetailOpen, setTriageDetailOpen] = useState(false);
   const [triageDetailLoading, setTriageDetailLoading] = useState(false);
   const [usage, setUsage] = useState<ChatUsage | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
 
@@ -291,10 +307,15 @@ export const ChatPanel = ({
   const activeParticipant = active ? participants[active.professional_id] : undefined;
   const periodActive = active ? isPeriodActive(active) : false;
   const standby = Boolean(active && active.status === "ACTIVE" && !periodActive);
+  const usageLoaded = usage !== null;
   const remainingChats = usage?.remaining ?? 0;
-  const quotaExhausted = standby && remainingChats <= 0;
-  const canSend = Boolean(active && active.status === "ACTIVE" && (periodActive || remainingChats > 0));
-  const isClosed = Boolean(active && (active.status !== "ACTIVE" || quotaExhausted));
+  const quotaExhausted = standby && usageLoaded && remainingChats <= 0;
+  const canRenewPeriod = standby && usageLoaded && remainingChats > 0;
+  const isStatusClosed = Boolean(active && active.status !== "ACTIVE");
+  const canSend = Boolean(
+    active && active.status === "ACTIVE" && (periodActive || (usageLoaded && remainingChats > 0))
+  );
+  const composerBlocked = isStatusClosed || quotaExhausted;
 
   const handleInputChange = (value: string) => {
     setInput(value);
@@ -375,6 +396,7 @@ export const ChatPanel = ({
   };
 
   const startChat = async (professionalId: string) => {
+    setStartingChat(true);
     try {
       const conversation = normalizeConversation(await chatService.startConversation(professionalId));
       setConversations((prev) =>
@@ -395,13 +417,26 @@ export const ChatPanel = ({
         const fetched = await usersService.getUserById(professionalId);
         setParticipants((prev) => ({ ...prev, [fetched.id]: fetched }));
       }
+
+      window.setTimeout(() => inputRef.current?.focus(), 50);
     } catch (error) {
       toast({
         title: "No se pudo iniciar el chat",
         description: errorMessage(error, "Revisa tu plan mensual de chats"),
         variant: "destructive",
       });
+    } finally {
+      setStartingChat(false);
     }
+  };
+
+  const reopenClosedChat = () => {
+    if (!active) return;
+    void startChat(active.professional_id);
+  };
+
+  const continueStandbyChat = () => {
+    inputRef.current?.focus();
   };
 
   useEffect(() => {
@@ -568,10 +603,14 @@ export const ChatPanel = ({
                     {activeParticipant?.full_name ?? "Profesional"}
                   </div>
                   <div className="text-xs text-muted-foreground truncate">
-                    {active.status !== "ACTIVE"
+                    {isStatusClosed
                       ? "Chat cerrado"
                       : quotaExhausted
                         ? "Sin chats disponibles este mes"
+                        : standby && !usageLoaded
+                          ? "Comprobando disponibilidad…"
+                          : canRenewPeriod
+                            ? "Periodo finalizado · ábrelo de nuevo para continuar"
                         : standby
                           ? "Periodo en espera · el próximo mensaje usa 1 chat del mes"
                         : isPeerTyping
@@ -628,24 +667,94 @@ export const ChatPanel = ({
 
             {/* INPUT */}
             <div className="p-3 sm:p-4 border-t border-border bg-card">
-              {isClosed && (
-                <p className="text-xs text-destructive text-center mb-2">
-                  Este chat ya finalizó. Inicia uno nuevo con este profesional si lo necesitas.
-                </p>
+              {isStatusClosed && (
+                <div className="mb-3 rounded-2xl border border-border bg-soft px-4 py-3 text-center space-y-2">
+                  <p className="text-sm text-foreground font-medium">
+                    Este chat ya finalizó
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Puedes abrir una nueva conversación con{" "}
+                    {activeParticipant?.full_name ?? "este profesional"}.
+                  </p>
+                  <Button
+                    variant="hero"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    disabled={startingChat}
+                    onClick={reopenClosedChat}
+                  >
+                    {startingChat ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Abriendo…
+                      </>
+                    ) : (
+                      <>
+                        <MessageCircle className="h-4 w-4" />
+                        Abrir de nuevo el chat
+                      </>
+                    )}
+                  </Button>
+                </div>
               )}
-              <div className="flex items-center gap-2 bg-secondary rounded-2xl px-3 py-2">
-                <input
-                  value={input}
-                  onChange={(e) => handleInputChange(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && send()}
-                  disabled={isClosed}
-                  placeholder="Escribe un mensaje…"
-                  className="flex-1 bg-transparent outline-none text-sm py-2 disabled:opacity-50 min-w-0"
-                />
-                <Button variant="hero" size="icon" onClick={send} disabled={!canSend} className="rounded-xl shrink-0">
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+
+              {quotaExhausted && (
+                <div className="mb-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-center space-y-2">
+                  <p className="text-sm text-foreground font-medium">
+                    Sin chats disponibles este mes
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Ya usaste los {usage?.monthly_chat_limit ?? ""} chats de tu plan
+                    {usage?.plan_name ? ` (${usage.plan_name})` : ""}. Mejora tu plan para continuar.
+                  </p>
+                  {onRequestPlan && (
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={onRequestPlan}>
+                      Ver mi plan
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {canRenewPeriod && (
+                <div className="mb-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-center space-y-2">
+                  <p className="text-sm text-foreground font-medium">
+                    Este chat ya finalizó
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Ábrelo de nuevo con {activeParticipant?.full_name ?? "este profesional"}{" "}
+                    (usa 1 chat de tu plan este mes).
+                  </p>
+                  <Button
+                    variant="hero"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={continueStandbyChat}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Abrir de nuevo el chat
+                  </Button>
+                </div>
+              )}
+
+              {!composerBlocked && (
+                <div className="flex items-center gap-2 bg-secondary rounded-2xl px-3 py-2">
+                  <input
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && send()}
+                    disabled={!canSend && !canRenewPeriod}
+                    placeholder={
+                      canRenewPeriod
+                        ? "Escribe para abrir de nuevo el chat…"
+                        : "Escribe un mensaje…"
+                    }
+                    className="flex-1 bg-transparent outline-none text-sm py-2 disabled:opacity-50 min-w-0"
+                  />
+                  <Button variant="hero" size="icon" onClick={send} disabled={!canSend} className="rounded-xl shrink-0">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               <p className="text-[10px] text-muted-foreground mt-2 text-center">🔒 Conversación confidencial</p>
             </div>
           </>
