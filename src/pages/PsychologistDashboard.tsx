@@ -1376,34 +1376,176 @@ const AgendaPanel = ({
 };
 
 /* ---------- ALERTS ---------- */
-const AlertsPanel = () => (
-  <div className="space-y-4">
-    {[
-      { name: "Sofía López", company: "Nova S.A.", reason: "Triage IA detectó lenguaje de alto riesgo emocional. Insomnio + ansiedad sostenida.", level: "Crítica", time: "Hace 12 min", color: "border-destructive bg-destructive/5" },
-      { name: "Mateo Ruiz", company: "Acme Corp", reason: "3 check-ins con estado emocional bajo en la última semana.", level: "Atención", time: "Hace 2 h", color: "border-amber-500 bg-amber-50" },
-      { name: "Juan Castro", company: "Nova S.A.", reason: "Solicitó sesión preparada con anticipación.", level: "Programada", time: "Ayer", color: "border-primary bg-primary/5" },
-    ].map((a, i) => (
-      <div key={i} className={`border-l-4 rounded-2xl p-5 ${a.color} bg-card border border-border shadow-soft`}>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldAlert className="h-4 w-4 text-destructive" />
-              <span className="text-xs font-bold uppercase tracking-wide">{a.level}</span>
-              <span className="text-xs text-muted-foreground">· {a.time}</span>
-            </div>
-            <h4 className="font-display font-bold text-primary text-lg">{a.name}</h4>
-            <p className="text-xs text-muted-foreground mb-1">{a.company}</p>
-            <p className="text-sm text-foreground/80">{a.reason}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">Ver perfil</Button>
-            <Button variant="hero" size="sm"><MessageCircle className="h-4 w-4" /> Atender</Button>
-          </div>
+const TRIAGE_LEVEL_CONFIG: Record<string, { label: string; color: string; border: string }> = {
+  URGENT: { label: "Crítica", color: "bg-destructive/10 text-destructive", border: "border-destructive" },
+  PRIORITY: { label: "Atención", color: "bg-amber-100 text-amber-700", border: "border-amber-500" },
+  PREVENTIVE: { label: "Preventiva", color: "bg-primary/10 text-primary", border: "border-primary" },
+  STABLE: { label: "Estable", color: "bg-success/10 text-success", border: "border-success" },
+};
+
+const TRIAGE_ORDER: Record<string, number> = { URGENT: 0, PRIORITY: 1, PREVENTIVE: 2, STABLE: 3 };
+
+const AlertsPanel = () => {
+  const [alerts, setAlerts] = useState<PatientTriageAlert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [filter, setFilter] = useState<"all" | "URGENT" | "PRIORITY">("all");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const result = await professionalInsightsService.listContactedPatientsTriage();
+        if (!cancelled) {
+          // Sort by severity
+          setAlerts(result.sort((a, b) =>
+            (TRIAGE_ORDER[a.triage.level] ?? 9) - (TRIAGE_ORDER[b.triage.level] ?? 9)
+          ));
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = filter === "all"
+    ? alerts
+    : alerts.filter((a) => a.triage.level === filter);
+
+  const urgentCount = alerts.filter((a) => a.triage.level === "URGENT").length;
+  const priorityCount = alerts.filter((a) => a.triage.level === "PRIORITY").length;
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {["a", "b", "c"].map((k) => (
+          <div key={k} className="h-28 bg-card border border-border rounded-2xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-card border border-border rounded-3xl p-8 text-center space-y-3 shadow-soft">
+        <p className="text-sm text-muted-foreground">No se pudieron cargar las alertas.</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          <RefreshCw className="h-4 w-4 mr-2" /> Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Summary + filter */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3 text-sm">
+          {urgentCount > 0 && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-destructive/10 text-destructive font-semibold">
+              <ShieldAlert className="h-3.5 w-3.5" /> {urgentCount} crítica{urgentCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {priorityCount > 0 && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-700 font-semibold">
+              <AlertTriangle className="h-3.5 w-3.5" /> {priorityCount} atención
+            </span>
+          )}
+          {urgentCount === 0 && priorityCount === 0 && (
+            <span className="text-muted-foreground">Sin alertas críticas activas</span>
+          )}
+        </div>
+        <div className="flex rounded-xl border border-border overflow-hidden h-8 text-xs shrink-0">
+          {(["all", "URGENT", "PRIORITY"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setFilter(v)}
+              className={cn(
+                "px-3 font-medium transition-smooth",
+                filter === v ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-soft"
+              )}
+            >
+              {v === "all" ? "Todas" : v === "URGENT" ? "Críticas" : "Atención"}
+            </button>
+          ))}
         </div>
       </div>
-    ))}
-  </div>
-);
+
+      {filtered.length === 0 ? (
+        <div className="bg-card border border-border rounded-3xl p-8 text-center shadow-soft">
+          <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-3">
+            <CheckCircle2 className="h-6 w-6 text-success" />
+          </div>
+          <p className="font-semibold text-primary">Todo bajo control</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            No hay alertas {filter !== "all" ? "con ese nivel " : ""}para tus pacientes en este momento.
+          </p>
+        </div>
+      ) : (
+        filtered.map((a) => {
+          const cfg = TRIAGE_LEVEL_CONFIG[a.triage.level] ?? TRIAGE_LEVEL_CONFIG.STABLE;
+          const timeAgo = (() => {
+            const diffMs = Date.now() - new Date(a.triage.created_at).getTime();
+            const mins = Math.floor(diffMs / 60000);
+            if (mins < 60) return `Hace ${mins} min`;
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return `Hace ${hours} h`;
+            const days = Math.floor(hours / 24);
+            if (days === 1) return "Ayer";
+            return `Hace ${days} días`;
+          })();
+
+          return (
+            <div
+              key={a.patient_id}
+              className={cn(
+                "border-l-4 rounded-2xl p-5 bg-card border border-border shadow-soft",
+                cfg.border
+              )}
+            >
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ShieldAlert className="h-4 w-4 text-destructive" />
+                    <span className={cn("text-xs font-bold uppercase tracking-wide", cfg.color.split(" ")[1])}>
+                      {cfg.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">· {timeAgo}</span>
+                  </div>
+                  <h4 className="font-display font-bold text-primary text-lg">{a.patient_name}</h4>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs text-muted-foreground">
+                      Puntuación: {a.triage.score}/{a.triage.max_score} ({a.triage.percentage}%)
+                    </span>
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold", cfg.color)}>
+                      {a.triage.label}
+                    </span>
+                  </div>
+                  <p className="text-sm text-foreground/80 mt-2">{a.triage.advice}</p>
+                  {a.triage.recommendation && (
+                    <p className="text-xs text-muted-foreground mt-1 italic">
+                      Recomendación: {a.triage.recommendation}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button variant="hero" size="sm">
+                    <MessageCircle className="h-4 w-4" /> Atender
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+};
 
 /* ---------- PATIENTS ---------- */
 const PatientsPanel = () => {
