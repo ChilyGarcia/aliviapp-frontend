@@ -1407,71 +1407,171 @@ const AlertsPanel = () => (
 
 /* ---------- PATIENTS ---------- */
 const PatientsPanel = () => {
-  const patients = [
-    { name: "Daniel Morales", company: "Acme Corp", sessions: 8, last: "Hoy", status: "Activo", risk: "Bajo" },
-    { name: "Sofía López", company: "Nova S.A.", sessions: 3, last: "Hoy", status: "Activo", risk: "Alto" },
-    { name: "Mateo Ruiz", company: "Acme Corp", sessions: 12, last: "Ayer", status: "Activo", risk: "Medio" },
-    { name: "Lucía Patiño", company: "Vértice", sessions: 5, last: "3 días", status: "Activo", risk: "Bajo" },
-    { name: "Juan Castro", company: "Nova S.A.", sessions: 2, last: "1 sem", status: "Pausa", risk: "Bajo" },
-    { name: "Ana García", company: "Acme Corp", sessions: 15, last: "2 sem", status: "Alta", risk: "Bajo" },
-  ];
+  const [patientMap, setPatientMap] = useState<Record<string, AuthUser>>({});
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const [convs, appts] = await Promise.all([
+          chatService.listConversations(),
+          schedulingService.listAppointments(),
+        ]);
+        if (cancelled) return;
+
+        setConversations(convs);
+        setAppointments(appts);
+
+        // Resolve unique patient profiles
+        const uniqueIds = Array.from(new Set(convs.map((c) => c.patient_id)));
+        const resolved = await Promise.all(uniqueIds.map((id) => usersService.getUserById(id)));
+        if (cancelled) return;
+        setPatientMap(Object.fromEntries(resolved.map((u) => [u.id, u])));
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Build enriched patient rows — one row per unique patient
+  const rows = Object.values(patientMap)
+    .filter((p) => p.is_active)
+    .map((p) => {
+      const patientConvs = conversations.filter((c) => c.patient_id === p.id);
+      const patientAppts = appointments.filter((a) => a.patient_id === p.id);
+      const lastConv = patientConvs.sort(
+        (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+      )[0];
+
+      const lastDate = lastConv ? new Date(lastConv.last_message_at) : null;
+      const now = new Date();
+      let lastLabel = "—";
+      if (lastDate) {
+        const diffMs = now.getTime() - lastDate.getTime();
+        const diffDays = Math.floor(diffMs / 86400000);
+        if (diffDays === 0) lastLabel = "Hoy";
+        else if (diffDays === 1) lastLabel = "Ayer";
+        else if (diffDays < 7) lastLabel = `${diffDays} días`;
+        else if (diffDays < 30) lastLabel = `${Math.floor(diffDays / 7)} sem`;
+        else lastLabel = `${Math.floor(diffDays / 30)} mes`;
+      }
+
+      const hasActive = patientConvs.some((c) => c.status === "ACTIVE");
+
+      return {
+        id: p.id,
+        name: p.full_name,
+        email: p.email,
+        sessions: patientAppts.length,
+        conversations: patientConvs.length,
+        last: lastLabel,
+        isActive: hasActive,
+      };
+    })
+    .filter((r) =>
+      !search ||
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.email.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => (a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1));
+
+  if (loading) {
+    return (
+      <div className="bg-card rounded-3xl shadow-soft border border-border p-6 space-y-3">
+        {["a", "b", "c", "d"].map((k) => (
+          <div key={k} className="h-12 bg-soft rounded-xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-card rounded-3xl shadow-soft border border-border p-8 text-center space-y-3">
+        <p className="text-sm text-muted-foreground">No se pudieron cargar los pacientes.</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          <RefreshCw className="h-4 w-4 mr-2" /> Reintentar
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card rounded-3xl shadow-soft border border-border overflow-hidden">
       <div className="p-5 border-b border-border flex items-center justify-between flex-wrap gap-3">
         <div>
           <h3 className="font-display font-bold text-primary">Pacientes asignados</h3>
-          <p className="text-xs text-muted-foreground">47 activos · 12 en seguimiento · 8 dados de alta</p>
+          <p className="text-xs text-muted-foreground">
+            {rows.length} paciente{rows.length !== 1 ? "s" : ""} con conversaciones
+          </p>
         </div>
-        <div className="flex gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input placeholder="Buscar..." className="bg-secondary rounded-xl pl-9 pr-3 py-2 text-sm outline-none" />
-          </div>
-          <Button variant="outline" size="sm"><Filter className="h-4 w-4" /> Filtrar</Button>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            placeholder="Buscar paciente…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-secondary rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 w-52"
+          />
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-soft text-xs text-muted-foreground uppercase">
-            <tr>
-              <th className="text-left px-5 py-3">Paciente</th>
-              <th className="text-left px-5 py-3">Empresa</th>
-              <th className="text-left px-5 py-3">Sesiones</th>
-              <th className="text-left px-5 py-3">Última</th>
-              <th className="text-left px-5 py-3">Estado</th>
-              <th className="text-left px-5 py-3">Riesgo</th>
-              <th className="text-right px-5 py-3">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {patients.map((p) => (
-              <tr key={p.name} className="border-t border-border hover:bg-soft transition-smooth">
-                <td className="px-5 py-3 font-semibold">{p.name}</td>
-                <td className="px-5 py-3 text-muted-foreground">{p.company}</td>
-                <td className="px-5 py-3">{p.sessions}</td>
-                <td className="px-5 py-3 text-muted-foreground">{p.last}</td>
-                <td className="px-5 py-3">
-                  <span className={cn(
-                    "text-[10px] px-2 py-0.5 rounded-full font-bold",
-                    p.status === "Activo" ? "bg-success/10 text-success" :
-                      p.status === "Pausa" ? "bg-amber-500/10 text-amber-700" :
-                        "bg-muted text-muted-foreground"
-                  )}>{p.status}</span>
-                </td>
-                <td className="px-5 py-3">
-                  <span className={cn(
-                    "text-[10px] px-2 py-0.5 rounded-full font-bold text-white",
-                    p.risk === "Alto" ? "bg-destructive" : p.risk === "Medio" ? "bg-amber-500" : "bg-success"
-                  )}>{p.risk}</span>
-                </td>
-                <td className="px-5 py-3 text-right">
-                  <Button variant="ghost" size="sm">Ver</Button>
-                </td>
+
+      {rows.length === 0 ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          {search ? "No hay pacientes que coincidan." : "Aún no tienes pacientes con conversaciones."}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-soft text-xs text-muted-foreground uppercase">
+              <tr>
+                <th className="text-left px-5 py-3">Paciente</th>
+                <th className="text-left px-5 py-3">Correo</th>
+                <th className="text-left px-5 py-3">Citas</th>
+                <th className="text-left px-5 py-3">Chats</th>
+                <th className="text-left px-5 py-3">Última actividad</th>
+                <th className="text-left px-5 py-3">Estado</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id} className="border-t border-border hover:bg-soft transition-smooth">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-cta flex items-center justify-center font-bold text-xs text-primary-foreground shrink-0">
+                        {p.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="font-semibold">{p.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground">{p.email}</td>
+                  <td className="px-5 py-3">{p.sessions}</td>
+                  <td className="px-5 py-3">{p.conversations}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{p.last}</td>
+                  <td className="px-5 py-3">
+                    <span className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-bold",
+                      p.isActive ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+                    )}>
+                      {p.isActive ? "Chat activo" : "Sin chat activo"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
