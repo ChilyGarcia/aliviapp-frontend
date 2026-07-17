@@ -76,9 +76,6 @@ export const ProfilePanel = ({ user, onUserUpdated }: ProfilePanelProps) => {
             <h2 className="font-display font-extrabold text-2xl md:text-3xl">{displayName}</h2>
             <p className="text-white/85">{roleLabel}</p>
             <div className="flex flex-wrap gap-3 mt-2 text-xs">
-              <span className="bg-white/15 px-2.5 py-1 rounded-full">
-                ID: ALV-{user?.id?.slice(0, 8) ?? "0000"}
-              </span>
               <span className={`px-2.5 py-1 rounded-full ${user?.is_active ? "bg-success/30" : "bg-destructive/30"}`}>
                 {user?.is_active ? "Activo" : "Inactivo"}
               </span>
@@ -178,13 +175,21 @@ export const ProfilePanel = ({ user, onUserUpdated }: ProfilePanelProps) => {
         </div>
       </div>
 
-      {/* Account metadata */}
+      {/* Account metadata — no internal IDs shown to users */}
       <div className="bg-card border border-border rounded-2xl p-6 shadow-soft mt-5">
         <h3 className="font-display font-bold text-primary mb-4">Detalles de cuenta</h3>
         <div className="grid sm:grid-cols-2 gap-4 text-sm">
           <div>
-            <div className="text-xs text-muted-foreground mb-0.5">ID de usuario</div>
-            <div className="font-mono text-xs text-foreground truncate">{user?.id ?? "—"}</div>
+            <div className="text-xs text-muted-foreground mb-0.5">Miembro desde</div>
+            <div className="text-foreground">
+              {user?.created_at
+                ? new Date(user.created_at).toLocaleDateString("es-CO", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })
+                : "—"}
+            </div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground mb-0.5">Última actualización</div>
