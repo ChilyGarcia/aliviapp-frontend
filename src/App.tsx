@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard.tsx";
 import PsychologistDashboard from "./pages/PsychologistDashboard.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import UsersLanding from "./user.tsx";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/usuarios" element={<UsersLanding />} />
           <Route path="/panel" element={
             <ProtectedRoute role="PATIENT">
               <Dashboard />
