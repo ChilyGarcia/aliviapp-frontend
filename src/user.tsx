@@ -75,7 +75,7 @@ const UsersLanding = () => {
                         <div className="flex flex-wrap gap-4">
                             <Button asChild variant="hero" size="xl">
                                 <a href="#precio">
-                                    Empezar por $150/mes
+                                    Empezar por $50/mes
                                     <ArrowRight className="ml-1" />
                                 </a>
                             </Button>
