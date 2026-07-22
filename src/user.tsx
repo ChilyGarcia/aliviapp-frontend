@@ -241,7 +241,7 @@ const UsersLanding = () => {
                             <p className="text-white/75 text-sm mb-6">Acompañamiento ilimitado por chat.</p>
 
                             <div className="flex items-baseline gap-2 mb-6">
-                                <span className="text-5xl font-display font-extrabold">$150</span>
+                                <span className="text-5xl font-display font-extrabold">$50</span>
                                 <span className="text-white/80">USD / mes</span>
                             </div>
 
