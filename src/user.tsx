@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
-import { Footer } from "@/components/Footer";
 import {
     MessageCircle,
     ShieldCheck,
@@ -295,7 +294,55 @@ const UsersLanding = () => {
             </section>
 
             {/* FOOTER */}
-            <Footer />
+            <footer id="contacto" className="bg-primary-deep text-primary-foreground pt-16 pb-8">
+                <div className="container">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-10 mb-10">
+                        <div>
+                            <Logo variant="light" />
+                            <p className="text-white/70 text-sm mt-4 max-w-xs">
+                                Tu salud emocional, en tu idioma.
+                            </p>
+                            <div className="flex gap-3 mt-5">
+                                {[Facebook, Instagram, Youtube].map((Icon, i) => (
+                                    <a key={i} href="#" className="h-9 w-9 rounded-full bg-white/10 hover:bg-accent transition-smooth flex items-center justify-center">
+                                        <Icon className="h-4 w-4" />
+                                    </a>
+                                ))}
+                                <a href="#" className="h-9 w-9 rounded-full bg-white/10 hover:bg-accent transition-smooth flex items-center justify-center">
+                                    <TikTokIcon className="h-4 w-4" />
+                                </a>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="font-display font-bold mb-4">AliviApp</h4>
+                            <ul className="space-y-2 text-sm text-white/75">
+                                <li><a href="#servicio" className="hover:text-accent">Servicio</a></li>
+                                <li><a href="#beneficios" className="hover:text-accent">Beneficios</a></li>
+                                <li><a href="#precio" className="hover:text-accent">Precio</a></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="font-display font-bold mb-4">Legal</h4>
+                            <ul className="space-y-2 text-sm text-white/75">
+                                <li><a href="#" className="hover:text-accent">Términos y condiciones</a></li>
+                                <li><a href="#" className="hover:text-accent">Política de privacidad</a></li>
+                                <li><a href="#" className="hover:text-accent">Consentimiento informado</a></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="font-display font-bold mb-4">Contacto</h4>
+                            <ul className="space-y-2 text-sm text-white/75">
+                                <li className="break-all">contacto@aliviapp.com.co</li>
+                                <li>+1 (786) 000-0000</li>
+                                <li>Soporte en español</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div className="border-t border-white/10 pt-6 text-center text-xs text-white/60">
+                        AliviApp ©2026 · Todos los derechos reservados.
+                    </div>
+                </div>
+            </footer>
         </div>
     );
 };
