@@ -16,6 +16,7 @@ import {
   ArrowRight,
   ShieldCheck,
   ArrowLeft,
+  Building2,
   KeyRound,
   CircleAlert,
   CircleCheck,
@@ -285,26 +286,19 @@ const Login = () => {
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-soft px-2 text-muted-foreground">o</span>
               </div>
             </div>
 
-            <Button type="button" variant="outline" size="lg" className="w-full">
-              <ShieldCheck className="h-4 w-4" /> Acceso con SSO empresarial
-            </Button>
           </form>
-
-          <p className="text-center text-sm text-muted-foreground mt-8">
-            ¿Tu empresa aún no tiene AliviApp?{" "}
-            <a href="mailto:contacto@aliviapp.com.co" className="text-primary font-semibold hover:underline">
-              Solicitar activación
-            </a>
-          </p>
 
           <div className="mt-6 p-4 rounded-xl bg-secondary/60 border border-border text-xs text-muted-foreground flex items-start gap-2">
             <Lock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
             Tu información se procesa de forma confidencial. Tu empleador nunca verá el contenido de tus conversaciones.
           </div>
+          <p className="text-center text-xs text-muted-foreground mt-6 inline-flex items-center gap-1 justify-center w-full">
+            <Building2 className="h-3 w-3" /> ¿Vienes desde tu empresa?{" "}
+            <Link to="/" className="text-primary hover:underline">Plan corporativo</Link>
+          </p>
         </div>
       </main>
     </div>
