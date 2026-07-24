@@ -78,10 +78,10 @@ const Index = () => {
               </Button>
             </div>
 
-            <div className="mt-10 flex items-center gap-6 text-sm text-white/75">
-              <div className="flex items-center gap-2"><Lock className="h-4 w-4" /> Confidencial</div>
-              <div className="flex items-center gap-2"><Clock className="h-4 w-4" /> Respuesta inmediata</div>
-              <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Profesionales certificados</div>
+            <div className="mt-10 flex flex-wrap items-center gap-4 sm:gap-6 text-sm text-white/75">
+              <div className="flex items-center gap-2"><Lock className="h-4 w-4 shrink-0" /> Confidencial</div>
+              <div className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0" /> Respuesta inmediata</div>
+              <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 shrink-0" /> Profesionales certificados</div>
             </div>
           </div>
 
