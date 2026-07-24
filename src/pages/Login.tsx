@@ -293,7 +293,7 @@ const Login = () => {
 
           <div className="mt-6 p-4 rounded-xl bg-secondary/60 border border-border text-xs text-muted-foreground flex items-start gap-2">
             <Lock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-            Tu información se procesa de forma confidencial. Tu empleador nunca verá el contenido de tus conversaciones.
+            Tu información se procesa de forma confidencial. Tus conversaciones son privadas y cifradas.
           </div>
           <p className="text-center text-xs text-muted-foreground mt-6 inline-flex items-center gap-1 justify-center w-full">
             <Building2 className="h-3 w-3" /> ¿Vienes desde tu empresa?{" "}
